@@ -35,13 +35,6 @@ vc = VoiceCoil(pio)
 af = AutoFocus()
 htr = Heater(pio, 2000)
 
-# Start video stream
-vs.start(QThread.HighPriority)
-ip.start(QThread.HighPriority)
-
-# Connect video/image stream to processing (Qt.BlockingQueuedConnection or QueuedConnection?)
-vs.frame.connect(ip.update, type=Qt.BlockingQueuedConnection)
-
 # Connect GUI signals
 mw.rotateSpinBox.valueChanged.connect(ip.enhancer.setRotateAngle)
 mw.gammaSpinBox.valueChanged.connect(ip.enhancer.setGamma)
@@ -50,14 +43,24 @@ mw.cropXp1Spinbox.valueChanged.connect(ip.enhancer.setCropXp1)
 mw.cropYp1Spinbox.valueChanged.connect(ip.enhancer.setCropYp1)
 mw.cropXp2Spinbox.valueChanged.connect(ip.enhancer.setCropXp2)
 mw.cropYp2Spinbox.valueChanged.connect(ip.enhancer.setCropYp2)
-mw.gridDetectorButton.stateChanged.connect(ip.setGridDetection)
 mw.VCSpinBox.valueChanged.connect(vc.setVal)
 mw.TemperatureSPinBox.valueChanged.connect(htr.setVal)
 mw.snapshotButton.clicked.connect(lambda: vs.snapshot(settings.value('temp_folder') +'/'))
+mw.autoFocusButton.clicked.connect(lambda: af.start(mw.VCSpinBox.value()))
+mw.gridDetectorButton.stateChanged.connect(ip.setGridDetection)
 htr.reading.connect(mw.temperatureUpdate)
 ip.frame.connect(mw.update)
 ip.quality.connect(mw.imageQualityUpdate)
 
+# Start video stream
+vs.start(QThread.HighPriority)
+ip.start(QThread.HighPriority)
+
+# Connect processing signals
+vs.frame.connect(ip.update, type=Qt.BlockingQueuedConnection)
+ip.quality.connect(af.imageQualityUpdate)
+af.focus.connect(mw.VCSpinBox.setValue)
+    
 # Connect logging signals
 vs.message.connect(lw.append)
 ip.message.connect(lw.append)

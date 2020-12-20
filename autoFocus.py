@@ -16,7 +16,7 @@ class AutoFocus(QObject):
 ##    Gridsearch of a hyperparameter H (image quality) over a process variable P (focus).
 ##    Start signal initiates a search around a given point P_centre, with gridsize N_p and gridspacing dP.
 ##    The search is repeated N_n times, where the gridspacing is halved with each step.
-    VCValue = pyqtSignal(float)  # Focus signal
+    focus = pyqtSignal(float)  # Focus signal
     message = pyqtSignal(str)
     
     def __init__(self, doPlot=False):
@@ -27,7 +27,10 @@ class AutoFocus(QObject):
         self.running = False
         
     @pyqtSlot(float)
-    def start(self, P_centre=0, N_p=11, dP=1, N_n=10):
+    def start(self, P_centre=0):
+        N_p=11
+        dP=1
+        N_n=10
         if self.running == True:
             self.message.emit('{}: error; autofocus is already running'.format(self.name))
         else:
@@ -54,15 +57,15 @@ class AutoFocus(QObject):
                 self.ax2.set_ylabel("Voice coil value")
                 plt.show(block=False)        
             self.P[self.p] = self.P_centre-self.dP*int((self.N_p-1)/2)  # current process parameter
-            self.VCValue.emit(self.P[self.p])  # Move to starting point of grid search
-            self.message.emit("{}: info; Running worker".format(self.__class__.__name__))
+            self.focus.emit(self.P[self.p])  # Move to starting point of grid search
+            self.message.emit("{}: info; running".format(self.__class__.__name__))
             self.running = True
 
     @pyqtSlot(float)
-    def imgQualUpdate(self, imgQual=0):
+    def imageQualityUpdate(self, imgQual=0):
         try:
             if self.running:  # autofocus is active
-                self.message.emit("{}: info; Image quality updated".format(self.__class__.__name__))
+                self.message.emit("{}: info; image quality updated".format(self.__class__.__name__))
                 self.H[self.p] = imgQual
                 if self.doPlot:
                # draw grid lines
@@ -90,16 +93,17 @@ class AutoFocus(QObject):
                     else:
                         self.running = False
                         value = self.P_centre
-                self.message.emit("{}: info; Focus adapted to {}".format(self.__class__.__name__, value))
-                self.VCValue.emit(value)  # set next focus
+                value = np.round(value,2)
+                self.message.emit("{}: info; focus adapted to {}".format(self.__class__.__name__, value))
+                self.focus.emit(value)  # set next focus
         except Exception as err:
-            self.message.emit("{}: error; Type: {}, Args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
         
     @pyqtSlot()
     def stop(self):
         try:
-            self.message.emit("{}: info; Stopping worker".format(self.__class__.__name__))
+            self.message.emit("{}: info; stopping worker".format(self.__class__.__name__))
             self.running = False
         except Exception as err:
-            self.message.emit("{}: error; Type: {}, Args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 
