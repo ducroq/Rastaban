@@ -25,10 +25,9 @@ class ImageEnhancer(QObject):
      
     More details.
     """
-    image = None
-    message = pyqtSignal(str)
+    image = prevImage = None
+    postMessage = pyqtSignal(str)
     result = pyqtSignal(np.ndarray)
-    progress = pyqtSignal(int)
     
     def __init__(self, *args, **kwargs):
         """The constructor."""
@@ -45,6 +44,9 @@ class ImageEnhancer(QObject):
 
         # Set gamma correction
         self.gamma = kwargs['gamma'] if 'gamma' in kwargs else 1.0
+
+        # Set video smoothing
+        self.alpha = kwargs['alpha'] if 'alpha' in kwargs else 0.0
 
         self.fps = FPS().start()
        
@@ -93,8 +95,10 @@ class ImageEnhancer(QObject):
             if 1.0 < self.gamma < 10.0:  
                 self.image = adjust_gamma(self.image, self.gamma)
 
+            self.prevImage = self.image.copy()
+
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
         else:
             self.fps.update()
         finally:
@@ -150,6 +154,15 @@ class ImageEnhancer(QObject):
             self.cropRect[2] = val            
         else:
             raise ValueError('crop y2')
+
+    @pyqtSlot(float)
+    def setBlend(self, val):
+        if 0 <= val < 1:
+            self.alpha = val
+        else:
+            raise ValueError('blend alpha')
+
+        
   
 def adjust_gamma(image, gamma=1.0):
    invGamma = 1.0 / gamma

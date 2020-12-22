@@ -13,3 +13,12 @@ def wait_signal(signal, timeout=1000):
     signal.connect(loop.quit) # only quit is a slot of QEventLoop
     QTimer.singleShot(timeout, loop.exit)
     loop.exec_()
+
+
+def wait_ms(timeout):
+    ''' Block loop until timeout (ms) elapses.
+    '''        
+    loop = QEventLoop()
+    QTimer.singleShot(timeout, loop.exit)
+    loop.exec_()
+    

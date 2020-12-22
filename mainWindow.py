@@ -27,7 +27,7 @@ class MainWindow(QWidget):
     GUI
     '''
     image = None
-    message = pyqtSignal(str)
+    postMessage = pyqtSignal(str)
     closed = pyqtSignal()
     
 
@@ -70,6 +70,7 @@ class MainWindow(QWidget):
         # Buttons
         self.snapshotButton = QPushButton("Snapshot")
         self.autoFocusButton = QPushButton("AutoFocus")
+        self.runButton = QPushButton("Run timelapse")
         self.gridDetectorButton = QCheckBox("GridDetector")
         # Spinboxes
         self.VCSpinBox = QDoubleSpinBox(self)
@@ -158,6 +159,7 @@ class MainWindow(QWidget):
                 widgetLayout.addWidget(widget, index, 1, Qt.AlignCenter)
         widgetLayout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum,QSizePolicy.Expanding))  # variable space
         widgetLayout.addWidget(self.snapshotButton,index+1,0,alignment=Qt.AlignLeft)
+        widgetLayout.addWidget(self.runButton,index+1,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.autoFocusButton,index+2,0,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.gridDetectorButton,index+2,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(QLabel("Image quality [au]: "),index+3,0,alignment=Qt.AlignLeft)
@@ -180,7 +182,7 @@ class MainWindow(QWidget):
     @pyqtSlot(np.ndarray)
     def update(self, image=None):
         self.kickTimer() # Measure time delay
-##        self.message.emit(self.name + ": height " + str(image.shape[0]))
+##        self.postMessage.emit(self.name + ": height " + str(image.shape[0]))
         if image is not None:  # we have a new image
             self.image = image
             if self.imageScalingFactor > 0 and self.imageScalingFactor < 1:  # Crop the image to create a zooming effect
@@ -249,8 +251,7 @@ class MainWindow(QWidget):
         if self.prevClockTime is not None:
             timeDiff = clockTime - self.prevClockTime
             self.timerLabel.setNum(round(timeDiff)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
-            self.message.emit("{}: info; processing delay = {} ms".format(self.__class__.__name__, round(timeDiff)))
-##            self.timerLabel.setText("Processing time: " + "{:4d}".format(round(1000*timeDiff.total_seconds())) + " ms")
+##            self.postMessage.emit("{}: info; processing delay = {} ms".format(self.__class__.__name__, round(timeDiff)))
         self.prevClockTime = clockTime
 
     @pyqtSlot(np.float)
@@ -275,7 +276,7 @@ class MainWindow(QWidget):
         event.accept()        
 
     def loadSettings(self):
-        self.message.emit("{}: info; Loading settings from: {}".format(self.__class__.__name__, self.settings.fileName()))
+        self.postMessage.emit("{}: info; Loading settings from: {}".format(self.__class__.__name__, self.settings.fileName()))
         frame_size_str = self.settings.value('image_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))
@@ -286,7 +287,7 @@ class MainWindow(QWidget):
                     self.valueWidgets[index].setValue(float(self.settings.value(key)))                    
 
     def saveSettings(self):
-        self.message.emit("{}: info; Saving settings to: {}".format(self.__class__.__name__, self.settings.fileName()))
+        self.postMessage.emit("{}: info; Saving settings to: {}".format(self.__class__.__name__, self.settings.fileName()))
         for index, widget in enumerate(self.keyWidgets):  # save all labeled parameters
             if isinstance(widget, QLabel):
                 key = "mainwindow/" + widget.text()

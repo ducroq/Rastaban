@@ -16,8 +16,9 @@ class AutoFocus(QObject):
 ##    Gridsearch of a hyperparameter H (image quality) over a process variable P (focus).
 ##    Start signal initiates a search around a given point P_centre, with gridsize N_p and gridspacing dP.
 ##    The search is repeated N_n times, where the gridspacing is halved with each step.
-    focus = pyqtSignal(float)  # Focus signal
-    message = pyqtSignal(str)
+    setFocus = pyqtSignal(float)  # Focus signal
+    postMessage = pyqtSignal(str)
+    focussed = pyqtSignal(float)
     
     def __init__(self, doPlot=False):
         super().__init__()
@@ -32,12 +33,12 @@ class AutoFocus(QObject):
         dP=1
         N_n=10
         if self.running == True:
-            self.message.emit('{}: error; autofocus is already running'.format(self.name))
+            self.postMessage.emit('{}: error; autofocus is already running'.format(self.__class__.__name__))
         else:
             self.N_n = N_n  # Maximum number of iterations
             if (N_p & 1) != 1:  # Enforce N_p to be odd
                 N_p += 1
-                self.message.emit("{}: info; constructor warning : Grid size must be odd, so changed to: {}".format(self.name, N_p))                
+                self.postMessage.emit("{}: info; warning : Grid size must be odd, so changed to: {}".format(self.__class__.__name__, N_p))                
             self.N_p = N_p  # Grid size
             self.dP = dP  # Grid spacing, percentage change in VC current per step        
             self.H = np.zeros(shape=(self.N_p,1), dtype=float)
@@ -57,15 +58,20 @@ class AutoFocus(QObject):
                 self.ax2.set_ylabel("Voice coil value")
                 plt.show(block=False)        
             self.P[self.p] = self.P_centre-self.dP*int((self.N_p-1)/2)  # current process parameter
-            self.focus.emit(self.P[self.p])  # Move to starting point of grid search
-            self.message.emit("{}: info; running".format(self.__class__.__name__))
+            self.setFocus.emit(self.P[self.p])  # Move to starting point of grid search
+            self.postMessage.emit("{}: info; running".format(self.__class__.__name__))
             self.running = True
 
     @pyqtSlot(float)
     def imageQualityUpdate(self, imgQual=0):
         try:
             if self.running:  # autofocus is active
-                self.message.emit("{}: info; image quality updated".format(self.__class__.__name__))
+                if imgQual <= 0:
+                    self.postMessage.emit("{}: error; image quality unreliable".format(self.__class__.__name__))
+                    self.running = False                    
+                    return
+
+                self.postMessage.emit("{}: info; image quality updated to {}".format(self.__class__.__name__, imgQual))
                 self.H[self.p] = imgQual
                 if self.doPlot:
                # draw grid lines
@@ -90,20 +96,20 @@ class AutoFocus(QObject):
                         self.p += self.p_sign  # Reset current grid point
                         self.P[self.p] = self.P_centre + (self.dP/(self.n+1))*(self.p-int((self.N_p-1)/2))  # compute next grid point
                         value = self.P[self.p]
-                    else:
+                    else: # done
                         self.running = False
                         value = self.P_centre
+                        self.focussed.emit(value) # publish focus
                 value = np.round(value,2)
-                self.message.emit("{}: info; focus adapted to {}".format(self.__class__.__name__, value))
-                self.focus.emit(value)  # set next focus
+                self.setFocus.emit(value)  # set next focus
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
         
     @pyqtSlot()
     def stop(self):
         try:
-            self.message.emit("{}: info; stopping worker".format(self.__class__.__name__))
+            self.postMessage.emit("{}: info; stopping worker".format(self.__class__.__name__))
             self.running = False
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 

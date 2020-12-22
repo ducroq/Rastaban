@@ -28,7 +28,7 @@ class ImageProcessor(QThread):
     image = None
     imageQuality = 0
     finished = pyqtSignal()
-    message = pyqtSignal(str)
+    postMessage = pyqtSignal(str)
     frame = pyqtSignal(np.ndarray)
     quality = pyqtSignal(float)
 
@@ -40,14 +40,13 @@ class ImageProcessor(QThread):
 
         self.gridDetection = False
         
-        self.enhancer.message.connect(self.messageRelay)
-        self.segmenter.message.connect(self.messageRelay)
+        self.enhancer.postMessage.connect(self.relayMessage)
+        self.segmenter.postMessage.connect(self.relayMessage)
 
         self.fps = FPS().start()
        
         
     def __del__(self):
-        None
         self.wait()
 
     @pyqtSlot(np.ndarray)
@@ -58,14 +57,14 @@ class ImageProcessor(QThread):
             if self.isRunning():
                 # thread is already running
                 # drop frame
-                self.message.emit("{}: info; busy, frame dropped".format(self.__class__.__name__))
+                self.postMessage.emit("{}: info; busy, frame dropped".format(self.__class__.__name__))
             elif image is not None:
                 # we have a new image
                 self.image = image #.copy()        
                 self.start()
                 
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 
        
     @pyqtSlot()
@@ -74,7 +73,7 @@ class ImageProcessor(QThread):
         Initialise the runner function with passed args, kwargs.
         '''
         if self.image is not None:
-##            self.message.emit("{}: info; running worker".format(self.__class__.__name__))
+##            self.postMessage.emit("{}: info; running worker".format(self.__class__.__name__))
            
             # Retrieve args/kwargs here; and fire processing using them
             try:
@@ -90,7 +89,7 @@ class ImageProcessor(QThread):
                     self.image, self.imageQuality = self.segmenter.start(self.image)
 
             except Exception as err:
-                self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+                self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
             else:
                 self.fps.update()
                 self.frame.emit(self.image)
@@ -98,13 +97,13 @@ class ImageProcessor(QThread):
                 
     @pyqtSlot()
     def stop(self):
-        self.message.emit("{}: info; stopping".format(__class__.__name__))
+        self.postMessage.emit("{}: info; stopping".format(__class__.__name__))
         if self.isRunning():
             self.requestInterruption()
             wait_signal(self.finished, 2000)            
         self.fps.stop()
         msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
-        self.message.emit(msg)
+        self.postMessage.emit(msg)
         print(msg)
         self.quit()
 
@@ -113,9 +112,9 @@ class ImageProcessor(QThread):
         self.gridDetection = val
 
     @pyqtSlot(str)
-    def messageRelay(self, text):
+    def relayMessage(self, text):
         text = self.__class__.__name__ + "; " + str(text)
-        self.message.emit(text)
+        self.postMessage.emit(text)
 
             
 

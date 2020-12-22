@@ -18,7 +18,22 @@ from fps import FPS
 from picamera import PiCamera
 from picamera.array import PiRGBArray, PiYUVArray, PiArrayOutput
 from PyQt5.QtCore import QThread, QSettings, pyqtSlot, QTimer, QEventLoop, pyqtSignal
-from wait import wait_signal
+from wait import wait_signal, wait_ms
+
+
+def raw_frame_size(frame_size, splitter=False):
+    """
+    Round a (width, height) tuple up to the nearest multiple of 32 horizontally
+    and 16 vertically (as this is what the Pi's camera module does for
+    unencoded output).
+    """
+    width, height = frame_size
+    if splitter:
+        fwidth = (width + 15) & ~15
+    else:
+        fwidth = (width + 31) & ~31
+    fheight = (height + 15) & ~15
+    return fwidth, fheight
 
 
 class PiYArray(PiArrayOutput):
@@ -45,12 +60,13 @@ class PiYArray(PiArrayOutput):
 class PiVideoStream(QThread):
     image = None
     finished = pyqtSignal()
-    message = pyqtSignal(str)
+    postMessage = pyqtSignal(str)
     frame = pyqtSignal(np.ndarray)
     progress = pyqtSignal(int)       
-    snapshotTaken = pyqtSignal()
-    clipRecorded = pyqtSignal()
+    captured = pyqtSignal()
+    
     camera = PiCamera()
+    storagePath = None
 
     ## @param ins is the number of instances created. This may not exceed 1.
     ins = 0
@@ -61,12 +77,12 @@ class PiVideoStream(QThread):
         ## Instance limiter. Checks if an instance exists already. If so, it deletes the current instance.
         if PiVideoStream.ins >= 1:
             del self            
-            self.message.emit("{}: error; multiple instances of created, while only 1 instance is allowed".format(__class__.__name__))
+            self.postMessage.emit("{}: error; multiple instances of created, while only 1 instance is allowed".format(__class__.__name__))
             return        
         try:
             PiVideoStream.ins+=1
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
         else:
             warnings.filterwarnings('default', category=DeprecationWarning)
             self.settings = QSettings("settings.ini", QSettings.IniFormat)
@@ -75,7 +91,7 @@ class PiVideoStream(QThread):
             
             
     def loadSettings(self):
-        self.message.emit("{}: info; loading camera settings from {}".format(self.__class__.__name__, self.settings.fileName()))
+        self.postMessage.emit("{}: info; loading camera settings from {}".format(self.__class__.__name__, self.settings.fileName()))
         frame_size_str = self.settings.value('camera/frame_size')
         (width, height) = frame_size_str.split('x')
         self.camera.resolution = raw_frame_size((int(width), int(height)))
@@ -101,7 +117,7 @@ class PiVideoStream(QThread):
         # Initialize the camera stream
         if self.isRunning():
             # in case init gets called, while thread is running
-            self.message.emit("{}: error; video stream is already running".format(__class__.__name__))
+            self.postMessage.emit("{}: error; video stream is already running".format(__class__.__name__))
         else:
             # init camera and open stream
             if self.monochrome:
@@ -115,8 +131,8 @@ class PiVideoStream(QThread):
             self.image = np.empty(self.camera.resolution + (1 if self.monochrome else 3,), dtype=np.uint8)
             # restart thread
             self.start()
-            self.wait_ms(1000)
-            self.message.emit("{}: info; video stream initialized with frame size = {}".format(__class__.__name__, str(self.camera.resolution)))
+            wait_ms(1000)
+            self.postMessage.emit("{}: info; video stream initialized with frame size = {}".format(__class__.__name__, str(self.camera.resolution)))
 
 
     @pyqtSlot()
@@ -133,19 +149,18 @@ class PiVideoStream(QThread):
                 self.frame.emit(cv2.resize(self.image, self.image_size)) # resize to speed up processing
                 self.fps.update()
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 
         
     @pyqtSlot()
     def stop(self):
-        self.message.emit("{}: info; stopping".format(__class__.__name__))
+        self.postMessage.emit("{}: info; stopping".format(__class__.__name__))
         if self.isRunning():
             self.requestInterruption()
             wait_signal(self.finished, 2000)        
         self.fps.stop()
         msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
-        self.message.emit(msg)
-        print(msg)
+        self.postMessage.emit(msg)
         self.quit()
        
 
@@ -164,26 +179,19 @@ class PiVideoStream(QThread):
         self.initStream()
 
 
-    def wait_ms(self, timeout):
-        ''' Block loop until timeout (ms) elapses.
-        '''        
-        loop = QEventLoop()
-        QTimer.singleShot(timeout, loop.exit)
-        loop.exec_()
-        
-
-    @pyqtSlot(str)
-    def snapshot(self, filename_prefix=None):
+    @pyqtSlot()
+    def takeImage(self):
+        filename = '{:016d}'.format(round(time.time() * 1000)) + '.png'
+                
         # open path
-        (head, tail) = os.path.split(filename_prefix)
-        if not os.path.exists(head):
-            os.makedirs(head)
-        filename = os.path.sep.join([head, '{:016d}_'.format(round(time.time() * 1000)) + tail + '.png'])
+        if self.storagePath is not None:
+            filename = os.path.sep.join([self.storagePath, filename])
 
         # write image
         wait_signal(self.frame, 5000) # wait for first frame to be shot
         cv2.imwrite(filename, self.image)
-        self.message.emit("{}: info; image written to {}".format(__class__.__name__, filename))
+        self.captured.emit()
+        self.postMessage.emit("{}: info; image written to {}".format(__class__.__name__, filename))
                 
 
     @pyqtSlot(str, int)
@@ -228,18 +236,10 @@ class PiVideoStream(QThread):
         self.loadSettings()
         self.initStream()
         self.clipRecorded.emit()
+
+    @pyqtSlot(str)
+    def setStoragePath(self, path):
+        self.storagePath = path
         
    
-def raw_frame_size(frame_size, splitter=False):
-    """
-    Round a (width, height) tuple up to the nearest multiple of 32 horizontally
-    and 16 vertically (as this is what the Pi's camera module does for
-    unencoded output).
-    """
-    width, height = frame_size
-    if splitter:
-        fwidth = (width + 15) & ~15
-    else:
-        fwidth = (width + 31) & ~31
-    fheight = (height + 15) & ~15
-    return fwidth, fheight
+

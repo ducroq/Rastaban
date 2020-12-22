@@ -21,9 +21,8 @@ class ImageSegmenter(QObject):
     """
     image = None
     imageQuality = 0
-    message = pyqtSignal(str)
+    postMessage = pyqtSignal(str)
     result = pyqtSignal(np.ndarray)
-    progress = pyqtSignal(int)    
     
     def __init__(self, *args, **kwargs):
         """The constructor."""
@@ -93,7 +92,8 @@ class ImageSegmenter(QObject):
             self.imageQuality = np.sqrt( np.var(col_stuff) # / col_stuff[np.abs(col_stuff) < .5].size
                                          + np.var(row_stuff) ) # / row_stuff[np.abs(row_stuff) < .5].size )
             # Rationale: sharp edges result in ROI increase
-            self.imageQuality *= 100*(self.ROI_total_area/np.prod(self.image.shape[0:2]))             
+            self.imageQuality *= 100*(self.ROI_total_area/np.prod(self.image.shape[0:2]))
+            self.imageQuality = round(self.imageQuality,1)
                 
             # Plot curves
             if self.debugPlot:
@@ -123,7 +123,7 @@ class ImageSegmenter(QObject):
 ##                    self.ax2.autoscale_view()
 
         except Exception as err:
-            self.message.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
         else:
             self.fps.update()
         finally:

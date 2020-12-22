@@ -15,6 +15,7 @@ from pyqtpicam import PiVideoStream
 from autoFocus import AutoFocus
 from voiceCoil import VoiceCoil
 from heater import Heater
+from timeLapse import TimeLapse
 import pigpio
 
 '''
@@ -33,6 +34,7 @@ vs = PiVideoStream()
 ip = ImageProcessor()
 vc = VoiceCoil(pio)
 af = AutoFocus()
+tl = TimeLapse()
 htr = Heater(pio, 2000)
 
 # Connect GUI signals
@@ -45,9 +47,10 @@ mw.cropXp2Spinbox.valueChanged.connect(ip.enhancer.setCropXp2)
 mw.cropYp2Spinbox.valueChanged.connect(ip.enhancer.setCropYp2)
 mw.VCSpinBox.valueChanged.connect(vc.setVal)
 mw.TemperatureSPinBox.valueChanged.connect(htr.setVal)
-mw.snapshotButton.clicked.connect(lambda: vs.snapshot(settings.value('temp_folder') +'/'))
+mw.snapshotButton.clicked.connect(vs.takeImage)
 mw.autoFocusButton.clicked.connect(lambda: af.start(mw.VCSpinBox.value()))
 mw.gridDetectorButton.stateChanged.connect(ip.setGridDetection)
+mw.runButton.clicked.connect(tl.start)
 htr.reading.connect(mw.temperatureUpdate)
 ip.frame.connect(mw.update)
 ip.quality.connect(mw.imageQualityUpdate)
@@ -59,27 +62,44 @@ ip.start(QThread.HighPriority)
 # Connect processing signals
 vs.frame.connect(ip.update, type=Qt.BlockingQueuedConnection)
 ip.quality.connect(af.imageQualityUpdate)
-af.focus.connect(mw.VCSpinBox.setValue)
+af.setFocus.connect(mw.VCSpinBox.setValue)
+tl.setLogFileName.connect(lw.setLogFileName)
+tl.setImageStoragePath.connect(vs.setStoragePath)
+tl.startCamera.connect(vs.initStream)
+tl.stopCamera.connect(vs.stop)
+tl.setGridDetector.connect(lambda: mw.gridDetectorButton.setChecked(True))
+tl.startAutoFocus.connect(lambda: af.start(mw.VCSpinBox.value()))
+af.focussed.connect(tl.focussedSlot)
+tl.takeImage.connect(vs.takeImage)
+tl.setFocusWithOffset.connect(lambda offset: vc.setVal(mw.VCSpinBox.value() + offset))
+vs.captured.connect(tl.capturedSlot)
+vs.captured.connect(lambda: lw.append("main: info; voice coil={:.1f} temperature={:.1f}".format(vc.value, htr.temperature)))
     
 # Connect logging signals
-vs.message.connect(lw.append)
-ip.message.connect(lw.append)
-af.message.connect(lw.append)
-vc.message.connect(lw.append)
-htr.message.connect(lw.append)
+vs.postMessage.connect(lw.append)
+mw.postMessage.connect(lw.append)
+ip.postMessage.connect(lw.append)
+af.postMessage.connect(lw.append)
+vc.postMessage.connect(lw.append)
+htr.postMessage.connect(lw.append)
+tl.postMessage.connect(lw.append)
 
 # Initialize objects from GUI
 ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
 ip.enhancer.setGamma(mw.gammaSpinBox.value())
 ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())
+ip.enhancer.setBlend(0.5)
 vc.setVal(mw.VCSpinBox.value())
-    
-# Recipes invoked when main window is closed, note that scheduler stops other threads
-mw.closed.connect(ip.stop, type=Qt.QueuedConnection)
-mw.closed.connect(vs.stop, type=Qt.QueuedConnection)
-mw.closed.connect(vc.stop, type=Qt.QueuedConnection)
-mw.closed.connect(af.stop, type=Qt.QueuedConnection)
-mw.closed.connect(lw.close, type=Qt.QueuedConnection)
+vs.setStoragePath(settings.value('temp_folder'))
+
+# Connect closing signals
+tl.finished.connect(mw.close)
+mw.closed.connect(ip.stop)
+mw.closed.connect(vs.stop)
+mw.closed.connect(vc.stop)
+mw.closed.connect(af.stop)
+mw.closed.connect(tl.stop)
+mw.closed.connect(lw.close)
     
 # Start the show
 lw.append("App started")
