@@ -103,7 +103,7 @@ class PiVideoStream(QThread):
         frame_size_str = self.settings.value('image_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))        
-        self.camera.video_denoise = False
+        self.camera.video_denoise = True
         self.monochrome = True
         self.use_video_port = True
         # dunno if setting awb mode manually is really useful

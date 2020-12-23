@@ -19,13 +19,21 @@ class Heater(QThread):
     pwm_frequency = 50000
     PWM_dutycyle_range = 100
     temperature = None
+    setPoint = None
+    prevEror = None
+    kP, kI, kD = 1.0, 0.1, 0.5
 
-    def __init__(self, pio, interval=1000):
+    def __init__(self, pio, interval=1000, setPoint=None):
         super().__init__()
         if not isinstance(pio, pigpio.pi):
             raise TypeError("Heater constructor attribute is not a pigpio.pi instance!")
+        if not (10 < interval < 10000):
+            raise ValueError("Heater interval value is unreasonable")
+        if setPoint is not None and not (20 < setPoint < 100):
+            raise ValueError("Heater setpoint value is unreasonable")
         self.pio = pio  # reference to pigpio
         self.interval = interval  # timer interval, i.e. update period [ms]
+        self.setTemperature(setPoint)
         self.timer = QTimer()
 ##        self.pio.set_mode(self.dir_pin, pigpio.OUTPUT)
 ##        self.pio.hardware_PWM(self.pwm_pin, self.pwm_frequency, 0)
@@ -45,7 +53,19 @@ class Heater(QThread):
                 data = self.pio.i2c_read_word_data(self.MCP9800Handle, 0x0)
                 self.temperature = round((data & 0xFF) + (data >> 12)*2**-4, 1)  # MSB and LSB seem flipped
                 self.reading.emit(self.temperature)
-                # todo: PID here                
+
+                # simple PID control
+                if self.setPoint is not None:
+                    deltaTime = self.interval/1000
+                    self.error = self.setPoint - self.temperature
+                    self.deltaError = (self.error - self.prevError)/deltaTime
+                    self.intError += self.error * deltaTime
+
+                    actuator = round(self.kP * self.error + \
+                                     self.kI * self.intError + \
+                                     self.kD * self.deltaError, 1)                    
+                    self.setVal(actuator)
+                    
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 
@@ -59,8 +79,13 @@ class Heater(QThread):
             if self.pio is not None:
                 self.pio.set_PWM_dutycycle(self.pwm_pin, pwm_val)
         except Exception as err:
-            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
+    @pyqtSlot(float)
+    def setTemperature(self, val):
+        # if set to None, PID temperature control is stopped
+        self.setPoint = val
+        self.error = self.prevError = self.deltaError = self.intError = 0
        
     @pyqtSlot()
     def stop(self):

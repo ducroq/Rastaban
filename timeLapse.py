@@ -34,6 +34,7 @@ class TimeLapse(QObject):
     progressUpdate = pyqtSignal(int)
     finished = pyqtSignal()
     setFocusWithOffset = pyqtSignal(float)
+    setTemperature = pyqtSignal(float)
 
     focus = None
     
@@ -66,6 +67,9 @@ class TimeLapse(QObject):
             if not self.timelapse_settings.value('filetype') == 'timelapse':
                 self.postMessage.emit('{}: error; not a timelapse settings file selected'.format(self.__class__.__name__))            
                 return
+
+            if self.timelapse_settings.contains('temperature'):
+                self.setTemperature.emit(float(self.timelapse_settings.value('temperature')))
 
             # set logging file
             self.local_storage_path = self.settings.value('temp_folder')
@@ -168,7 +172,7 @@ class TimeLapse(QObject):
             if checkSetting(self.timelapse_settings.value('acquisition/autofocus')):
                 if str(self.timelapse_settings.value('acquisition/focusgoal')).lower() in ['grid', 'g']:
                     self.setGridDetector.emit()
-                    wait_ms(500)
+                    wait_ms(500) # wait to let grid detection fire up
                     self.postMessage.emit('{}: info; using grid as focus goal'.format(self.__class__.__name__))
                     
                 self.startAutoFocus.emit()
@@ -180,6 +184,7 @@ class TimeLapse(QObject):
                 # set offset                
                 offset = float(offset_str)
                 self.setFocusWithOffset.emit(offset)
+                wait_ms(500) # wait to let camera image settle
 
                 # clear local image storage path
                 path = os.path.sep.join([self.local_image_storage_path, '*'])

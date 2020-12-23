@@ -74,7 +74,8 @@ tl.takeImage.connect(vs.takeImage)
 tl.setFocusWithOffset.connect(lambda offset: vc.setVal(mw.VCSpinBox.value() + offset))
 vs.captured.connect(tl.capturedSlot)
 vs.captured.connect(lambda: lw.append("main: info; voice coil={:.1f} temperature={:.1f}".format(vc.value, htr.temperature)))
-    
+tl.setTemperature.connect(htr.setTemperature)
+
 # Connect logging signals
 vs.postMessage.connect(lw.append)
 mw.postMessage.connect(lw.append)
@@ -88,7 +89,7 @@ tl.postMessage.connect(lw.append)
 ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
 ip.enhancer.setGamma(mw.gammaSpinBox.value())
 ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())
-ip.enhancer.setBlend(0.5)
+ip.enhancer.setBlend(0.25)
 vc.setVal(mw.VCSpinBox.value())
 vs.setStoragePath(settings.value('temp_folder'))
 
