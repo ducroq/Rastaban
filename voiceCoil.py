@@ -25,7 +25,7 @@ class VoiceCoil(QObject):
     def setVal(self, val):
         # val specifies polarity and percentage of full current
         self.value = round(val,1)
-        self.postMessage.emit("{}: info; voice coil value = {}".format(self.__class__.__name__, self.value))
+##        self.postMessage.emit("{}: info; voice coil value = {}".format(self.__class__.__name__, self.value))
         try:
             if self.pio is not None:
                 self.pio.hardware_PWM(self.pwm_pin, self.pwm_frequency, int(abs(self.value)*1e4))

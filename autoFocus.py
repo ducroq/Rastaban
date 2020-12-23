@@ -100,6 +100,8 @@ class AutoFocus(QObject):
                         self.running = False
                         value = self.P_centre
                         self.focussed.emit(value) # publish focus
+                        self.postMessage.emit("{}: info; final image quality {} at process value {}".format(self.__class__.__name__, imgQual, value))
+                        
                 value = np.round(value,2)
                 self.setFocus.emit(value)  # set next focus
         except Exception as err:

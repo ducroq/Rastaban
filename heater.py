@@ -86,6 +86,7 @@ class Heater(QThread):
         # if set to None, PID temperature control is stopped
         self.setPoint = val
         self.error = self.prevError = self.deltaError = self.intError = 0
+        self.postMessage.emit("{}: info; heater temperature setpoint = {}°C".format(self.__class__.__name__, self.setPoint))
        
     @pyqtSlot()
     def stop(self):
