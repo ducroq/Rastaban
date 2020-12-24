@@ -29,7 +29,7 @@ class AutoFocus(QObject):
         
     @pyqtSlot(float)
     def start(self, P_centre=0):
-        N_p=11
+        N_p=5
         dP=1
         N_n=10
         if self.running == True:
@@ -67,11 +67,11 @@ class AutoFocus(QObject):
         try:
             if self.running:  # autofocus is active
                 if imgQual <= 0:
-                    self.postMessage.emit("{}: error; image quality unreliable".format(self.__class__.__name__))
+                    self.postMessage.emit("{}: error; image quality indicator unreliable".format(self.__class__.__name__))
                     self.running = False                    
                     return
 
-                self.postMessage.emit("{}: info; image quality updated to {}".format(self.__class__.__name__, imgQual))
+##                self.postMessage.emit("{}: info; image quality updated to {}".format(self.__class__.__name__, imgQual))
                 self.H[self.p] = imgQual
                 if self.doPlot:
                # draw grid lines
@@ -88,9 +88,10 @@ class AutoFocus(QObject):
                     value = self.P[self.p]
                 else:
                     self.n += 1  # New iteration
-                    self.P_centre = self.P[np.argmax(self.H),0] # set new grid centre point
+                    max_ind = np.argmax(self.H)
+                    self.P_centre = self.P[max_ind,0] # set new grid centre point
                     if self.n < self.N_n:  # still iterating
-##                        self.P.fill(0) # clear parameter array 
+                        self.P.fill(0) # clear parameter array 
                         self.H.fill(0) # clear hyperparameter array 
                         self.p_sign *= -1 # Reverse direction
                         self.p += self.p_sign  # Reset current grid point
@@ -98,12 +99,13 @@ class AutoFocus(QObject):
                         value = self.P[self.p]
                     else: # done
                         self.running = False
-                        value = self.P_centre
+                        value = round(self.P_centre,2)
                         self.focussed.emit(value) # publish focus
-                        self.postMessage.emit("{}: info; final image quality {} at process value {}".format(self.__class__.__name__, imgQual, value))
+                        self.postMessage.emit("{}: info; final image quality {} at process value {}".format(self.__class__.__name__, self.H[max_ind], value))
                         
                 value = np.round(value,2)
                 self.setFocus.emit(value)  # set next focus
+                
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
         

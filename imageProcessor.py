@@ -33,7 +33,7 @@ class ImageProcessor(QThread):
     quality = pyqtSignal(float)
 
     enhancer = ImageEnhancer()
-    segmenter = ImageSegmenter(plot=False)
+    segmenter = ImageSegmenter()
 
     def __init__(self):
         super().__init__()

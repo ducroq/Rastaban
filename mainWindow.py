@@ -129,9 +129,9 @@ class MainWindow(QWidget):
         self.adaptiveThresholdBlocksizeSpinBox.setMinimum(3)
         self.adaptiveThresholdBlocksizeSpinBox.setSingleStep(2)
         self.TemperatureSPinBox = QDoubleSpinBox(self)
-        self.TemperatureSPinBoxTitle = QLabel("heater value")
+        self.TemperatureSPinBoxTitle = QLabel("Temperature")
         self.TemperatureSPinBox.setSingleStep(1)
-        self.TemperatureSPinBox.setSuffix("%")
+        self.TemperatureSPinBox.setSuffix(" °C")
         self.TemperatureSPinBox.setMinimum(0.0)
         self.TemperatureSPinBox.setMaximum(100.0)
      

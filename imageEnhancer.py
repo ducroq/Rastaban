@@ -32,6 +32,12 @@ class ImageEnhancer(QObject):
     def __init__(self, *args, **kwargs):
         """The constructor."""
         super().__init__()
+
+        # ksize - bilateral Blur aperture linear size;
+        #  must be odd and greater than 1, for example: 3, 5, 7 ...
+        #  Filter size: Large filters (d > 5) are very slow, so it is recommended to use d=5 for real-time applications,
+        #  and perhaps d=9 for offline applications that need heavy noise filtering.
+        self.ksize = kwargs['ksize'] if 'ksize' in kwargs else 0        
         
         # Set crop area to (p1_y, p1_x, p2_y, p2_x)
         self.cropRect = kwargs['cropRect'] if 'cropRect' in kwargs else [0,0,0,0]
@@ -86,6 +92,9 @@ class ImageEnhancer(QObject):
 
             if (p2_y > p1_y) and (p2_x > p1_x):
                 self.image = self.image[p1_y:p2_y, p1_x:p2_x]
+
+            # Blur, beware this is very slow
+            self.image = self.image if self.ksize < 1 else cv2.bilateralFilter(self.image, self.ksize, self.ksize*2, self.ksize*4)                
             
             # Contrast Limited Adaptive Histogram Equalization.
             if self.clahe is not None:  
@@ -161,6 +170,13 @@ class ImageEnhancer(QObject):
             self.alpha = val
         else:
             raise ValueError('blend alpha')
+
+    @pyqtSlot(int)
+    def setKsize(self, val):
+        if (val == 0) or ( (0<val<50) and ((val & 1) == 1) ):
+            self.ksize = val
+        else:
+            raise ValueError('ksize must be odd')        
 
         
   

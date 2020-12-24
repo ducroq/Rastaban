@@ -184,7 +184,7 @@ class TimeLapse(QObject):
                 # set offset                
                 offset = float(offset_str)
                 self.setFocusWithOffset.emit(offset)
-                wait_ms(500) # wait to let camera image settle
+                wait_ms(200) # wait to let camera image settle
 
                 # clear local image storage path
                 path = os.path.sep.join([self.local_image_storage_path, '*'])
@@ -201,6 +201,10 @@ class TimeLapse(QObject):
                                         local_directory=self.local_image_storage_path)
                 val = self.focus + offset if self.focus is not None else offset
                 self.postMessage.emit('{}: info; saved image at focus: {:.1f}%'.format(self.__class__.__name__, val))
+
+            # return to no offset
+            self.setFocusWithOffset.emit(0)
+            wait_ms(100) # wait to let camera image settle
                 
             # push log file
             self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)

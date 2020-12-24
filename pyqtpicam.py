@@ -103,9 +103,9 @@ class PiVideoStream(QThread):
         frame_size_str = self.settings.value('image_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))        
-        self.camera.video_denoise = True
-        self.monochrome = True
-        self.use_video_port = True
+        self.camera.video_denoise = self.settings.value('camera/video_denoise')
+        self.monochrome = self.settings.value('camera/monochrome')
+        self.use_video_port = self.settings.value('camera/use_video_port')
         # dunno if setting awb mode manually is really useful
 ##        self.camera.awb_mode = 'off'
 ##        self.camera.awb_gains = 5.0
@@ -132,7 +132,9 @@ class PiVideoStream(QThread):
             # restart thread
             self.start()
             wait_ms(1000)
-            self.postMessage.emit("{}: info; video stream initialized with frame size = {}".format(__class__.__name__, str(self.camera.resolution)))
+            self.postMessage.emit("{}: info; video stream initialized with frame size = {} and {:d} channels".format(__class__.__name__,
+                                                                                                                   str(self.camera.resolution),
+                                                                                                                   (1 if self.monochrome else 3)))
 
 
     @pyqtSlot()

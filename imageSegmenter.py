@@ -28,10 +28,6 @@ class ImageSegmenter(QObject):
         """The constructor."""
         super().__init__()
 
-        # ksize - Median Blur aperture linear size;
-        #  must be odd and greater than 1, for example: 3, 5, 7 ...
-        self.ksize = kwargs['ksize'] if 'ksize' in kwargs else 0
-
         # Findgrid parameter as a fraction of the image size
         self.sizeFrac = kwargs['sizeFrac'] if 'sizeFrac' in kwargs else 0.005
 
@@ -59,11 +55,6 @@ class ImageSegmenter(QObject):
         """Image processing function."""        
         try:
             self.image = Image
-            self.ROIs = None
-            self.imageQuality = None
-
-            # Blur the image, beware this is very slow
-            self.image = self.image if self.ksize < 1 else cv2.medianBlur(self.image, self.ksize)
 
             # Find grid pattern along row and column averages
             row_av = cv2.reduce(self.image, 0, cv2.REDUCE_AVG, dtype=cv2.CV_32S).flatten('F')
@@ -84,16 +75,16 @@ class ImageSegmenter(QObject):
                     self.ROI_total_area += x[1]*y[1]
 
             # Compute metrics from grid pattern
-            # Rationale: parameterize edge histogram by variance to amplitude (0-bin) ratio 
+            # Rationale: parameterize edge histogram by variance to amplitude (0-bin) ratio
             col_stuff = np.diff(smooth_col_av[~col_mask]) # slice masked areas
-            col_stuff = col_stuff[25:-25]  # slice edge effects
+            col_stuff = col_stuff[50:-50]  # slice edge effects
             row_stuff = np.diff(smooth_row_av[~row_mask]) # slice masked areas
-            row_stuff = row_stuff[25:-25]  # slice edge effects
+            row_stuff = row_stuff[50:-50]  # slice edge effects
             self.imageQuality = np.sqrt( np.var(col_stuff) # / col_stuff[np.abs(col_stuff) < .5].size
                                          + np.var(row_stuff) ) # / row_stuff[np.abs(row_stuff) < .5].size )
             # Rationale: sharp edges result in ROI increase
 ##            self.imageQuality *= 100*(self.ROI_total_area/np.prod(self.image.shape[0:2]))
-            self.imageQuality = round(self.imageQuality,1)
+            self.imageQuality = round(self.imageQuality,2)
                 
             # Plot curves
             if self.debugPlot:
@@ -129,6 +120,7 @@ class ImageSegmenter(QObject):
         finally:
             return self.image, self.imageQuality
 
+            
 def moving_average(x, N=5):
     if N > 1 and (N & 1) == 1:
         x = np.pad(x, pad_width=(N // 2, N // 2),
@@ -137,7 +129,6 @@ def moving_average(x, N=5):
         return (cumsum[N:] - cumsum[:-N]) / float(N)
     else:
         raise ValueError("Moving average size must be odd and greater than 1.")
-
 
 def find1DGrid(data, N):    
     if N <= 1:

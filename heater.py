@@ -74,7 +74,7 @@ class Heater(QThread):
     def setVal(self, val):
         # val specifies percentage of full current
         pwm_val = round((abs(val)/100)*self.PWM_dutycyle_range, 1)
-        self.postMessage.emit("{}: info; heater value = {}".format(self.__class__.__name__, pwm_val))
+##        self.postMessage.emit("{}: info; heater value = {}".format(self.__class__.__name__, pwm_val))
         try:
             if self.pio is not None:
                 self.pio.set_PWM_dutycycle(self.pwm_pin, pwm_val)
