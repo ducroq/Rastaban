@@ -58,12 +58,13 @@ class Heater(QThread):
                 if self.setPoint is not None:
                     deltaTime = self.interval/1000
                     self.error = self.setPoint - self.temperature
-                    self.deltaError = (self.error - self.prevError)/deltaTime
+                    self.deltaError = (self.error - self.prevError)/deltaTime if self.prevError is not None else 0
                     self.intError += self.error * deltaTime
 
                     actuator = round(self.kP * self.error + \
                                      self.kI * self.intError + \
-                                     self.kD * self.deltaError, 1)                    
+                                     self.kD * self.deltaError, 1)
+                    actuator = actuator if actuator > 0 else 0
                     self.setVal(actuator)
                     
         except Exception as err:
@@ -72,12 +73,15 @@ class Heater(QThread):
 
     @pyqtSlot(float)
     def setVal(self, val):
-        # val specifies percentage of full current
-        pwm_val = round((abs(val)/100)*self.PWM_dutycyle_range, 1)
-##        self.postMessage.emit("{}: info; heater value = {}".format(self.__class__.__name__, pwm_val))
         try:
-            if self.pio is not None:
-                self.pio.set_PWM_dutycycle(self.pwm_pin, pwm_val)
+            if val < 0 or val > 100:
+                raise ValueError
+            else:
+                # val specifies percentage of full current
+                pwm_val = round((val/100)*self.PWM_dutycyle_range, 1)
+##                self.postMessage.emit("{}: info; heater value = {}".format(self.__class__.__name__, pwm_val))
+                if self.pio is not None:
+                    self.pio.set_PWM_dutycycle(self.pwm_pin, pwm_val)
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
@@ -85,7 +89,8 @@ class Heater(QThread):
     def setTemperature(self, val):
         # if set to None, PID temperature control is stopped
         self.setPoint = val
-        self.error = self.prevError = self.deltaError = self.intError = 0
+        self.prevError = None
+        self.intError = 0
         self.postMessage.emit("{}: info; heater temperature setpoint = {}°C".format(self.__class__.__name__, self.setPoint))
        
     @pyqtSlot()

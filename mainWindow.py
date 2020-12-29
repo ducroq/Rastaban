@@ -256,11 +256,11 @@ class MainWindow(QWidget):
 
     @pyqtSlot(np.float)
     def temperatureUpdate(self, temp=None):
-        self.temperatureLabel.setNum(round(temp)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
+        self.temperatureLabel.setNum(round(temp,2)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
 
     @pyqtSlot(np.float)
     def imageQualityUpdate(self, image_quality=None):
-        self.imageQualityLabel.setNum(round(image_quality)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
+        self.imageQualityLabel.setNum(round(image_quality,2)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
 
     def wheelEvent(self, event):
         if (event.angleDelta().y() > 0) and (self.imageScalingFactor > self.imageScalingStep):  # zooming in
