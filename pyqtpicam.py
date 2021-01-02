@@ -19,7 +19,6 @@ from picamera import PiCamera
 from picamera.array import PiRGBArray, PiYUVArray, PiArrayOutput
 from PyQt5.QtCore import QThread, QSettings, pyqtSlot, QTimer, QEventLoop, pyqtSignal
 from wait import wait_signal, wait_ms
-from checkSetting import checkSetting
 
 
 def raw_frame_size(frame_size, splitter=False):
@@ -104,9 +103,9 @@ class PiVideoStream(QThread):
         frame_size_str = self.settings.value('image_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))        
-        self.camera.video_denoise = checkSetting(self.settings.value('camera/video_denoise'))
-        self.monochrome = checkSetting(self.settings.value('camera/monochrome'))
-        self.use_video_port = checkSetting(self.settings.value('camera/use_video_port'))
+        self.camera.video_denoise = self.settings.value('camera/video_denoise', False, type=bool)
+        self.monochrome = self.settings.value('camera/monochrome', False, type=bool)
+        self.use_video_port = self.settings.value('camera/use_video_port', False, type=bool)
 
         if not self.monochrome:
             self.image_size = self.image_size + (3,)

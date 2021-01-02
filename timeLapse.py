@@ -14,8 +14,6 @@ from webdav3.exceptions import WebDavException
 from PyQt5.QtCore import QSettings, QObject, QTimer, QEventLoop, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog, QFileDialog #, QPushButton, QLabel, QSpinBox, QDoubleSpinBox, QVBoxLayout, QGridLayout
 from wait import wait_signal, wait_ms
-from checkSetting import checkSetting
-
 
     
 class TimeLapse(QObject):
@@ -167,7 +165,7 @@ class TimeLapse(QObject):
             self.startCamera.emit()
 
             # autofocus
-            if checkSetting(self.timelapse_settings.value('acquisition/autofocus')):
+            if self.timelapse_settings.value('acquisition/autofocus', False, type=bool):
                 if str(self.timelapse_settings.value('acquisition/focusgoal')).lower() in ['grid', 'g']:
                     self.setGridDetector.emit()
                     wait_ms(500) # wait to let grid detection fire up
@@ -226,7 +224,7 @@ class TimeLapse(QObject):
                 self.timer.stop()
                 self.postMessage.emit("{}: info; run finalized".format(self.__class__.__name__))
                 self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)
-                if checkSetting(self.timelapse_settings.value('shutdown')):
+                if self.timelapse_settings.value('shutdown', False, type=bool):
                     self.postMessage.emit("{}: info; shutdown app".format(self.__class__.__name__))
                     self.finished.emit()
 
