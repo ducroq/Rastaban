@@ -14,10 +14,8 @@ from webdav3.exceptions import WebDavException
 from PyQt5.QtCore import QSettings, QObject, QTimer, QEventLoop, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog, QFileDialog #, QPushButton, QLabel, QSpinBox, QDoubleSpinBox, QVBoxLayout, QGridLayout
 from wait import wait_signal, wait_ms
+from checkSetting import checkSetting
 
-def checkSetting(setting):
-    s = str(setting)
-    return s.lower() in ['true', '1', 't', 'y', 'yes']
 
     
 class TimeLapse(QObject):

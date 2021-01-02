@@ -19,6 +19,7 @@ from picamera import PiCamera
 from picamera.array import PiRGBArray, PiYUVArray, PiArrayOutput
 from PyQt5.QtCore import QThread, QSettings, pyqtSlot, QTimer, QEventLoop, pyqtSignal
 from wait import wait_signal, wait_ms
+from checkSetting import checkSetting
 
 
 def raw_frame_size(frame_size, splitter=False):
@@ -103,9 +104,12 @@ class PiVideoStream(QThread):
         frame_size_str = self.settings.value('image_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))        
-        self.camera.video_denoise = self.settings.value('camera/video_denoise')
-        self.monochrome = self.settings.value('camera/monochrome')
-        self.use_video_port = self.settings.value('camera/use_video_port')
+        self.camera.video_denoise = checkSetting(self.settings.value('camera/video_denoise'))
+        self.monochrome = checkSetting(self.settings.value('camera/monochrome'))
+        self.use_video_port = checkSetting(self.settings.value('camera/use_video_port'))
+
+        if not self.monochrome:
+            self.image_size = self.image_size + (3,)
         # dunno if setting awb mode manually is really useful
 ##        self.camera.awb_mode = 'off'
 ##        self.camera.awb_gains = 5.0
@@ -132,9 +136,8 @@ class PiVideoStream(QThread):
             # restart thread
             self.start()
             wait_ms(1000)
-            self.postMessage.emit("{}: info; video stream initialized with frame size = {} and {:d} channels".format(__class__.__name__,
-                                                                                                                   str(self.camera.resolution),
-                                                                                                                   (1 if self.monochrome else 3)))
+            self.postMessage.emit("{}: info; video stream initialized with frame size = {} and {:d} channels".format(\
+                __class__.__name__, str(self.camera.resolution), 1 if self.monochrome else 3))
 
 
     @pyqtSlot()
@@ -145,10 +148,9 @@ class PiVideoStream(QThread):
                 if self.isInterruptionRequested():
                     self.finished.emit()
                     return                   
-##                self.rawCapture.truncate(0)  # Depricated: clear the stream in preparation for the next frame
                 self.rawCapture.seek(0) 
                 self.image = f.array # grab the frame from the stream
-                self.frame.emit(cv2.resize(self.image, self.image_size)) # resize to speed up processing
+                self.frame.emit(cv2.resize(self.image, self.image_size[:2])) # resize image to speed up processing?
                 self.fps.update()
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            

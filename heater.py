@@ -75,7 +75,7 @@ class Heater(QThread):
     def setVal(self, val):
         try:
             if val < 0 or val > 100:
-                raise ValueError
+                raise ValueError('Value must be a nonnegative percentage')
             else:
                 # val specifies percentage of full current
                 pwm_val = round((val/100)*self.PWM_dutycyle_range, 1)
@@ -92,6 +92,7 @@ class Heater(QThread):
         self.prevError = None
         self.intError = 0
         self.postMessage.emit("{}: info; heater temperature setpoint = {}°C".format(self.__class__.__name__, self.setPoint))
+        
        
     @pyqtSlot()
     def stop(self):
