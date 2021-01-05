@@ -7,6 +7,10 @@ Based on
  https://www.raspberrypi.org/documentation/hardware/camera/
     
 version December 2020
+Note that there are different image sizes involved:
+1. frame_size: intended image capture frame size, this is converted to a size that the picamera can deal with, i.e. raw_frame_size
+2. clip_frame_size: intended video capture frame size
+3. image_frame_size: size of frames that get emitted to the processing chain.
 """
 import os
 import cv2
@@ -67,6 +71,7 @@ class PiVideoStream(QThread):
     
     camera = PiCamera()
     storagePath = None
+    cropRect = [0] * 4
 
     ## @param ins is the number of instances created. This may not exceed 1.
     ins = 0
@@ -98,17 +103,17 @@ class PiVideoStream(QThread):
         self.camera.framerate = int(self.settings.value('camera/frame_rate'))
         self.camera.image_effect = self.settings.value('camera/effect')
         self.camera.shutter_speed = int(self.settings.value('camera/shutter_speed'))
-        self.camera.iso = int(self.settings.value('camera/iso')) # should force unity analog gain
-        # set parameters for speed
-        frame_size_str = self.settings.value('image_frame_size')
-        (width, height) = frame_size_str.split('x')
-        self.image_size = (int(width), int(height))        
+        self.camera.iso = int(self.settings.value('camera/iso')) # should force unity analog gain       
         self.camera.video_denoise = self.settings.value('camera/video_denoise', False, type=bool)
         self.monochrome = self.settings.value('camera/monochrome', False, type=bool)
         self.use_video_port = self.settings.value('camera/use_video_port', False, type=bool)
 
+        # set image frame size for processing further, 
+        frame_size_str = self.settings.value('image_frame_size')
+        (width, height) = frame_size_str.split('x')
+        self.image_frame_size = (int(width), int(height))
         if not self.monochrome:
-            self.image_size = self.image_size + (3,)
+            self.image_frame_size = self.image_frame_size + (3,)
         # dunno if setting awb mode manually is really useful
 ##        self.camera.awb_mode = 'off'
 ##        self.camera.awb_gains = 5.0
@@ -132,6 +137,12 @@ class PiVideoStream(QThread):
                 self.stream = self.camera.capture_continuous(self.rawCapture, 'bgr', self.use_video_port)
             # allocate memory 
             self.image = np.empty(self.camera.resolution + (1 if self.monochrome else 3,), dtype=np.uint8)
+            # init crop rectangle
+            if self.cropRect[2] == 0:
+                self.cropRect[2] = self.image.shape[1]
+            if self.cropRect[3] == 0:
+                self.cropRect[3] = self.image.shape[0]
+            print(self.cropRect)
             # restart thread
             self.start()
             wait_ms(1000)
@@ -149,7 +160,11 @@ class PiVideoStream(QThread):
                     return                   
                 self.rawCapture.seek(0) 
                 self.image = f.array # grab the frame from the stream
-                self.frame.emit(cv2.resize(self.image, self.image_size[:2])) # resize image to speed up processing?
+                # Crop
+                if (self.cropRect[2] > self.cropRect[0]) and (self.cropRect[3] > self.cropRect[1]):
+                    self.image = self.image[self.cropRect[0]:self.cropRect[2], self.cropRect[1]:self.cropRect[3]]
+                # Emit resized frame for speed 
+                self.frame.emit(cv2.resize(self.image, self.image_frame_size[:2]))
                 self.fps.update()
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
@@ -244,5 +259,31 @@ class PiVideoStream(QThread):
     def setStoragePath(self, path):
         self.storagePath = path
         
-   
+    @pyqtSlot(int)
+    def setCropXp1(self, val):
+        if 0 <= val <= self.cropRect[3]:        
+            self.cropRect[1] = val
+        else:
+            raise ValueError('crop x1')
+            
+    @pyqtSlot(int)
+    def setCropXp2(self, val):
+        if self.cropRect[1] < val < self.camera.resolution[1]:            
+            self.cropRect[3] = val
+        else:
+            raise ValueError('crop x2')
+            
+    @pyqtSlot(int)
+    def setCropYp1(self, val):
+        if 0 <= val <= self.cropRect[2]:        
+            self.cropRect[0] = val            
+        else:
+            raise ValueError('crop y1')
+            
+    @pyqtSlot(int)
+    def setCropYp2(self, val):
+        if self.cropRect[0] < val < self.camera.resolution[0]:
+            self.cropRect[2] = val            
+        else:
+            raise ValueError('crop y2')   
 

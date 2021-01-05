@@ -41,10 +41,10 @@ htr = Heater(pio, 2000)
 mw.rotateSpinBox.valueChanged.connect(ip.enhancer.setRotateAngle)
 mw.gammaSpinBox.valueChanged.connect(ip.enhancer.setGamma)
 mw.claheSpinBox.valueChanged.connect(ip.enhancer.setClaheClipLimit)
-mw.cropXp1Spinbox.valueChanged.connect(ip.enhancer.setCropXp1)
-mw.cropYp1Spinbox.valueChanged.connect(ip.enhancer.setCropYp1)
-mw.cropXp2Spinbox.valueChanged.connect(ip.enhancer.setCropXp2)
-mw.cropYp2Spinbox.valueChanged.connect(ip.enhancer.setCropYp2)
+mw.cropXp1Spinbox.valueChanged.connect(vs.setCropXp1)
+mw.cropYp1Spinbox.valueChanged.connect(vs.setCropYp1)
+mw.cropXp2Spinbox.valueChanged.connect(vs.setCropXp2)
+mw.cropYp2Spinbox.valueChanged.connect(vs.setCropYp2)
 mw.VCSpinBox.valueChanged.connect(vc.setVal)
 mw.TemperatureSPinBox.valueChanged.connect(htr.setTemperature)
 mw.snapshotButton.clicked.connect(vs.takeImage)
@@ -93,6 +93,10 @@ ip.enhancer.setBlend(0.25)
 ip.enhancer.setKsize(5)
 vc.setVal(mw.VCSpinBox.value())
 vs.setStoragePath(settings.value('temp_folder'))
+### set max parameters from here?
+##frame_size_str = self.settings.value('camera/frame_size')
+#mw.cropXp1Spinbox.setMaximum
+
 
 # Connect closing signals
 tl.finished.connect(mw.close)
