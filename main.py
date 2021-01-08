@@ -26,7 +26,6 @@ if not pio.connected:
     print("ERROR: pigpio daemon is not started")
     exit()
     
-settings = QSettings("settings.ini", QSettings.IniFormat)
 app = QApplication([])
 mw = MainWindow()
 lw = LogWindow()
@@ -85,19 +84,6 @@ vc.postMessage.connect(lw.append)
 htr.postMessage.connect(lw.append)
 tl.postMessage.connect(lw.append)
 
-# Initialize objects from GUI
-ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
-ip.enhancer.setGamma(mw.gammaSpinBox.value())
-ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())
-ip.enhancer.setBlend(0.25)
-ip.enhancer.setKsize(5)
-vc.setVal(mw.VCSpinBox.value())
-vs.setStoragePath(settings.value('temp_folder'))
-### set max parameters from here?
-##frame_size_str = self.settings.value('camera/frame_size')
-#mw.cropXp1Spinbox.setMaximum
-
-
 # Connect closing signals
 tl.finished.connect(mw.close)
 mw.closed.connect(htr.stop)
@@ -109,7 +95,19 @@ mw.closed.connect(tl.stop)
 mw.closed.connect(lw.close)
     
 # Start the show
+settings = QSettings("settings.ini", QSettings.IniFormat)
 lw.append("App started")
+vs.initStream()
+ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
+ip.enhancer.setGamma(mw.gammaSpinBox.value())
+ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())
+ip.enhancer.setBlend(0.25)
+ip.enhancer.setKsize(5)
+vc.setVal(mw.VCSpinBox.value())
+vs.setStoragePath(settings.value('temp_folder'))
+### set max parameters from here?
+##frame_size_str = self.settings.value('camera/frame_size')
+#mw.cropXp1Spinbox.setMaximum
 mw.move(100,100)
 mw.resize(1500, 500)
 lw.move(100,800)

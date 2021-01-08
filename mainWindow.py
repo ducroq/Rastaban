@@ -275,7 +275,7 @@ class MainWindow(QWidget):
 
     def loadSettings(self):
         self.postMessage.emit("{}: info; Loading settings from: {}".format(self.__class__.__name__, self.settings.fileName()))
-        frame_size_str = self.settings.value('image_frame_size')
+        frame_size_str = self.settings.value('display_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))
         for index, widget in enumerate(self.keyWidgets):  # retreive all labeled parameters

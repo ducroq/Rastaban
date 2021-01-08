@@ -99,8 +99,8 @@ class Heater(QThread):
         try:
             self.postMessage.emit("{}: info; stopping worker".format(self.__class__.__name__))
             if self.pio is not None:
+                self.pio.i2c_close(self.i2cBus)
                 self.pio.set_PWM_dutycycle(self.pwm_pin, 0) # PWM off
-                self.pio.i2c_close(self.MCP9800Handle)
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
 

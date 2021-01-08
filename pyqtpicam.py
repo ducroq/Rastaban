@@ -10,7 +10,7 @@ version December 2020
 Note that there are different image sizes involved:
 1. frame_size: intended image capture frame size, this is converted to a size that the picamera can deal with, i.e. raw_frame_size
 2. clip_frame_size: intended video capture frame size
-3. image_frame_size: size of frames that get emitted to the processing chain.
+3. display_frame_size: size of frames that get emitted to the processing chain.
 """
 import os
 import cv2
@@ -92,28 +92,50 @@ class PiVideoStream(QThread):
             warnings.filterwarnings('default', category=DeprecationWarning)
             self.settings = QSettings("settings.ini", QSettings.IniFormat)
             self.loadSettings()
-            self.initStream()
+##            self.initStream()
             
             
     def loadSettings(self):
         self.postMessage.emit("{}: info; loading camera settings from {}".format(self.__class__.__name__, self.settings.fileName()))
-        frame_size_str = self.settings.value('camera/frame_size')
+
+        # load
+        self.monochrome = self.settings.value('camera/monochrome', False, type=bool)
+        self.use_video_port = self.settings.value('camera/use_video_port', False, type=bool)
+        self.sensor_mode = int(self.settings.value('camera/sensor_mode'))
+
+        # set frame sizes
+        if self.sensor_mode == 0:
+            self.frame_size = (4056,3040)
+        if self.sensor_mode == 1:
+            self.frame_size = (1920,1080)
+        elif self.sensor_mode == 2 or self.sensor_mode == 3:
+            self.frame_size = (3280, 2464)               
+        elif self.sensor_mode == 4:
+            self.frame_size = (1640, 1232)               
+        elif self.sensor_mode == 5:
+            self.frame_size = (1640,922)
+        elif self.sensor_mode == 6:
+            self.frame_size = (1280, 720)
+        elif self.sensor_mode == 7:
+            self.frame_size = (640, 480)
+        else:
+            raise ValueError
+
+        frame_size_str = self.settings.value('display_frame_size')
         (width, height) = frame_size_str.split('x')
-        self.camera.resolution = raw_frame_size((int(width), int(height)))
+        self.display_frame_size = (int(width), int(height))
+        if not self.monochrome:
+            self.display_frame_size = self.display_frame_size + (3,)
+
+        # set more camera parameters
+        self.camera.resolution = self.frame_size
+        self.camera.sensor_mode = self.sensor_mode
         self.camera.framerate = int(self.settings.value('camera/frame_rate'))
         self.camera.image_effect = self.settings.value('camera/effect')
         self.camera.shutter_speed = int(self.settings.value('camera/shutter_speed'))
         self.camera.iso = int(self.settings.value('camera/iso')) # should force unity analog gain       
         self.camera.video_denoise = self.settings.value('camera/video_denoise', False, type=bool)
-        self.monochrome = self.settings.value('camera/monochrome', False, type=bool)
-        self.use_video_port = self.settings.value('camera/use_video_port', False, type=bool)
 
-        # set image frame size for processing further, 
-        frame_size_str = self.settings.value('image_frame_size')
-        (width, height) = frame_size_str.split('x')
-        self.image_frame_size = (int(width), int(height))
-        if not self.monochrome:
-            self.image_frame_size = self.image_frame_size + (3,)
         # dunno if setting awb mode manually is really useful
 ##        self.camera.awb_mode = 'off'
 ##        self.camera.awb_gains = 5.0
@@ -142,12 +164,12 @@ class PiVideoStream(QThread):
                 self.cropRect[2] = self.image.shape[1]
             if self.cropRect[3] == 0:
                 self.cropRect[3] = self.image.shape[0]
-            print(self.cropRect)
             # restart thread
             self.start()
             wait_ms(1000)
-            self.postMessage.emit("{}: info; video stream initialized with frame size = {} and {:d} channels".format(\
-                __class__.__name__, str(self.camera.resolution), 1 if self.monochrome else 3))
+            msg = "{}: info; video stream initialized with frame size = {} and {:d} channels".format(\
+                __class__.__name__, str(self.camera.resolution), 1 if self.monochrome else 3)
+            self.postMessage.emit(msg)
 
 
     @pyqtSlot()
@@ -160,11 +182,11 @@ class PiVideoStream(QThread):
                     return                   
                 self.rawCapture.seek(0) 
                 self.image = f.array # grab the frame from the stream
-                # Crop
-                if (self.cropRect[2] > self.cropRect[0]) and (self.cropRect[3] > self.cropRect[1]):
-                    self.image = self.image[self.cropRect[0]:self.cropRect[2], self.cropRect[1]:self.cropRect[3]]
+##                # Crop
+##                if (self.cropRect[2] > self.cropRect[0]) and (self.cropRect[3] > self.cropRect[1]):
+##                    self.frame.emit(self.image[self.cropRect[0]:self.cropRect[2], self.cropRect[1]:self.cropRect[3]])
                 # Emit resized frame for speed 
-                self.frame.emit(cv2.resize(self.image, self.image_frame_size[:2]))
+                self.frame.emit(cv2.resize(self.image, self.display_frame_size[:2]))
                 self.fps.update()
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
@@ -179,23 +201,9 @@ class PiVideoStream(QThread):
         self.fps.stop()
         msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
         self.postMessage.emit(msg)
+        print(msg)
         self.quit()
        
-
-    @pyqtSlot()
-    def changeCameraSettings(self, frame_size=(640,480), frame_rate=24, format='bgr', effect='none', use_video_port=False, monochrome=True):
-        '''
-        The use_video_port parameter controls whether the camera’s image or video port is used to capture images.
-        It defaults to False which means that the camera’s image port is used. This port is slow but produces better quality pictures.
-        '''
-        self.stop()
-        self.camera.resolution = raw_frame_size(frame_size)
-        self.camera.framerate = frame_rate
-        self.camera.image_effect = effect
-        self.use_video_port = use_video_port
-        self.monochrome = monochrome
-        self.initStream()
-
 
     @pyqtSlot()
     def takeImage(self):
@@ -223,12 +231,16 @@ class PiVideoStream(QThread):
 ##"TODO; changing camera settings may get the process killed after several hours, probably better to open the stream in video resolution from the start if the videorecording is required!")
 
         # set video clip parameters
+        self.stop()
         frame_size_str = self.settings.value('camera/clip_frame_size')
-        frame_size_str.split('x')
-        frame_size = raw_frame_size((int(frame_size_str.split('x')[0]),
-                                     int(frame_size_str.split('x')[1])))
-        frame_rate = int(self.settings.value('camera/clip_frame_rate'))
-        self.changeCameraSettings(frame_size=frame_size, frame_rate=frame_rate, use_video_port=True, monochrome=False)
+        (width, height) = frame_size_str.split('x')
+        self.camera.resolution = (int(width), int(height))        
+        self.camera.sensor_mode = int(self.settings.value('camera/clip_sensor_mode'))        
+        self.camera.framerate = int(self.settings.value('camera/clip_frame_rate'))
+        self.camera.image_effect = effect
+        self.use_video_port = True
+        self.monochrome = True
+        self.initStream()        
 
         # define the codec and create VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
