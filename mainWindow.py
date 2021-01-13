@@ -71,7 +71,6 @@ class MainWindow(QWidget):
         self.snapshotButton = QPushButton("Snapshot")
         self.autoFocusButton = QPushButton("AutoFocus")
         self.runButton = QPushButton("Run timelapse")
-        self.gridDetectorButton = QCheckBox("GridDetector")
         # Spinboxes
         self.VCSpinBox = QDoubleSpinBox(self)
         self.VCSpinBoxTitle = QLabel("VC")
@@ -132,7 +131,12 @@ class MainWindow(QWidget):
         self.TemperatureSPinBox.setSuffix(" °C")
         self.TemperatureSPinBox.setMinimum(0.0)
         self.TemperatureSPinBox.setMaximum(100.0)
-     
+
+        # Combo boxes
+        self.focusTargetComboBoxTitle = QLabel("Focus target")
+        self.focusTargetComboBox = QComboBox(self)
+        self.focusTargetComboBox.addItems(["Centre RoI", "Grid", "RoIs on Grid"])        
+             
         # Compose layout grid
         self.keyWidgets = [self.VCSpinBoxTitle, self.rotateSpinBoxTitle,
                            self.gammaSpinBoxTitle, self.claheSpinBoxTitle,
@@ -140,26 +144,25 @@ class MainWindow(QWidget):
                            self.adaptiveThresholdBlocksizeSpinBoxTitle,
                            self.cropXp1SpinboxTitle, self.cropYp1SpinboxTitle,
                            self.cropXp2SpinboxTitle, self.cropYp2SpinboxTitle,
-                           self.TemperatureSPinBoxTitle]
+                           self.TemperatureSPinBoxTitle, self.focusTargetComboBoxTitle]
         self.valueWidgets = [self.VCSpinBox, self.rotateSpinBox,
                              self.gammaSpinBox, self.claheSpinBox,
                              self.adaptiveThresholdOffsetSpinbox,
                              self.adaptiveThresholdBlocksizeSpinBox,
                              self.cropXp1Spinbox, self.cropYp1Spinbox,
                              self.cropXp2Spinbox, self.cropYp2Spinbox,
-                             self.TemperatureSPinBox]
+                             self.TemperatureSPinBox, self.focusTargetComboBox]
         widgetLayout = QGridLayout()
         for index, widget in enumerate(self.keyWidgets):
             if widget is not None:
-                widgetLayout.addWidget(widget, index, 0, Qt.AlignCenter)
+                widgetLayout.addWidget(widget, index, 0, Qt.AlignLeft)
         for index, widget in enumerate(self.valueWidgets):
             if widget is not None:
-                widgetLayout.addWidget(widget, index, 1, Qt.AlignCenter)
+                widgetLayout.addWidget(widget, index, 1, Qt.AlignLeft)
         widgetLayout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum,QSizePolicy.Expanding))  # variable space
         widgetLayout.addWidget(self.snapshotButton,index+1,0,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.runButton,index+1,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.autoFocusButton,index+2,0,alignment=Qt.AlignLeft)
-        widgetLayout.addWidget(self.gridDetectorButton,index+2,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(QLabel("Image quality [au]: "),index+3,0,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.imageQualityLabel,index+3,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(QLabel("Processing time [ms]: "),index+4,0,alignment=Qt.AlignLeft)
@@ -281,16 +284,25 @@ class MainWindow(QWidget):
         for index, widget in enumerate(self.keyWidgets):  # retreive all labeled parameters
             if isinstance(widget, QLabel):
                 key = "mainwindow/" + widget.text()
+                valueWidget = self.valueWidgets[index]
                 if self.settings.contains(key):
-                    self.valueWidgets[index].setValue(float(self.settings.value(key)))                    
+                    if isinstance(valueWidget, QCheckBox):
+                        pass
+                    elif isinstance(valueWidget, QComboBox):
+                        valueWidget.setCurrentIndex(int(self.settings.value(key)))
+                    else:
+                        valueWidget.setValue(float(self.settings.value(key)))
 
     def saveSettings(self):
         self.postMessage.emit("{}: info; Saving settings to: {}".format(self.__class__.__name__, self.settings.fileName()))
         for index, widget in enumerate(self.keyWidgets):  # save all labeled parameters
             if isinstance(widget, QLabel):
                 key = "mainwindow/" + widget.text()
-                self.settings.setValue(key, self.valueWidgets[index].value())
-        for index, widget in enumerate(self.valueWidgets):  # save all labeled parameters
-            if isinstance(widget, QCheckBox):
-                key = "mainwindow/" + widget.text()
-                self.settings.setValue(key, widget.isChecked())       
+                valueWidget = self.valueWidgets[index]
+                if isinstance(valueWidget, QCheckBox):
+                    self.settings.setValue(key, valueWidget.isChecked())
+                elif isinstance(valueWidget, QComboBox):
+                    self.settings.setValue(key, valueWidget.currentIndex())
+                else:
+                    self.settings.setValue(key, self.valueWidgets[index].value())
+

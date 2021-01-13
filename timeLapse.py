@@ -25,7 +25,8 @@ class TimeLapse(QObject):
     takeImage = pyqtSignal()
     startAutoFocus = pyqtSignal()
     focussed = pyqtSignal() # repeater signal
-    setGridDetector = pyqtSignal()
+    setFocusTarget = pyqtSignal(int)
+##    setGridDetector = pyqtSignal()
     captured = pyqtSignal() # repeater signal
     progressUpdate = pyqtSignal(int)
     finished = pyqtSignal()
@@ -166,11 +167,10 @@ class TimeLapse(QObject):
 
             # autofocus
             if self.timelapse_settings.value('acquisition/autofocus', False, type=bool):
-                if str(self.timelapse_settings.value('acquisition/focusgoal')).lower() in ['grid', 'g']:
-                    self.setGridDetector.emit()
-                    wait_ms(500) # wait to let grid detection fire up
-                    self.postMessage.emit('{}: info; using grid as focus goal'.format(self.__class__.__name__))
-                    
+                focusTarget = self.timelapse_settings.value('acquisition/focustarget')
+                self.postMessage.emit('{}: info; using ROI as {} focus target'.format(self.__class__.__name__, focusTarget))
+                self.setFocusTarget.emit(focusTarget)
+                wait_ms(500) # wait to let grid detection fire up
                 self.startAutoFocus.emit()
                 wait_signal(self.focussed, 60000)
 

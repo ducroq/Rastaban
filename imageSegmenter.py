@@ -13,6 +13,7 @@ import traceback
 import matplotlib.pyplot as plt
 from PyQt5.QtCore import QObject, QSettings, QThread, QTimer, QEventLoop, pyqtSignal, pyqtSlot
 from fps import FPS
+from rectangle import Rectangle
 
 class ImageSegmenter(QObject):
     """Image segmenter
@@ -62,17 +63,8 @@ class ImageSegmenter(QObject):
             col_av = cv2.reduce(self.image, 1, cv2.REDUCE_AVG, dtype=cv2.CV_32S).flatten('F')
             col_seg_list, col_mask, smooth_col_av = find1DGrid(col_av, int(self.sizeFrac*col_av.size))
 
-            # Create ROI list and annotate image
-            list_width = len(row_seg_list)
-            list_length = len(col_seg_list)
-            self.ROIs = np.zeros([list_width*list_length,4], dtype=np.uint16)
-            self.ROI_total_area = 0
-            for i, x in enumerate(row_seg_list):
-                for j, y in enumerate(col_seg_list):
-                    # ROI: (left,top,width,height)
-                    self.ROIs[i+j*list_width] = [x[0],y[0],x[1],y[1]]
-                    cv2.rectangle(self.image, (x[0],y[0]), (x[0]+x[1],y[0]+y[1]), (0, 255, 0), 2)
-                    self.ROI_total_area += x[1]*y[1]
+            # Create ROI list
+            self.ROIs = [[Rectangle(x[0],y[0],x[0]+x[1],y[0]+y[1]) for y in col_seg_list] for x in row_seg_list]
 
             # Compute metrics from grid pattern
             # Rationale: parameterize edge histogram by variance to amplitude (0-bin) ratio
@@ -118,7 +110,7 @@ class ImageSegmenter(QObject):
         else:
             self.fps.update()
         finally:
-            return self.image, self.imageQuality
+            return self.ROIs, self.imageQuality
 
             
 def moving_average(x, N=5):
