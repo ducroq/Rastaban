@@ -16,6 +16,7 @@ from autoFocus import AutoFocus
 from voiceCoil import VoiceCoil
 from heater import Heater
 from timeLapse import TimeLapse
+from sysTemp import SystemTemperatures
 import pigpio
 
 '''
@@ -35,6 +36,7 @@ vc = VoiceCoil(pio)
 af = AutoFocus(doPlot=True)
 tl = TimeLapse()
 htr = Heater(pio, 2000)
+st = SystemTemperatures(interval=10, alarm_temperature=55)
 
 # Connect GUI signals
 mw.rotateSpinBox.valueChanged.connect(ip.enhancer.setRotateAngle)
@@ -84,8 +86,10 @@ af.postMessage.connect(lw.append)
 vc.postMessage.connect(lw.append)
 htr.postMessage.connect(lw.append)
 tl.postMessage.connect(lw.append)
+st.postMessage.connect(lw.append)
 
 # Connect closing signals
+st.failure.connect(mw.close, type=Qt.QueuedConnection)
 tl.finished.connect(mw.close)
 mw.closed.connect(htr.stop)
 mw.closed.connect(ip.stop)
