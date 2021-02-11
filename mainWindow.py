@@ -71,6 +71,7 @@ class MainWindow(QWidget):
         self.snapshotButton = QPushButton("Snapshot")
         self.autoFocusButton = QPushButton("AutoFocus")
         self.runButton = QPushButton("Run timelapse")
+        self.videoclipButton = QPushButton("VideoClip")
         # Spinboxes
         self.VCSpinBox = QDoubleSpinBox(self)
         self.VCSpinBoxTitle = QLabel("VC")
@@ -159,10 +160,11 @@ class MainWindow(QWidget):
         for index, widget in enumerate(self.valueWidgets):
             if widget is not None:
                 widgetLayout.addWidget(widget, index, 1, Qt.AlignLeft)
-        widgetLayout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum,QSizePolicy.Expanding))  # variable space
         widgetLayout.addWidget(self.snapshotButton,index+1,0,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.runButton,index+1,1,alignment=Qt.AlignLeft)
-        widgetLayout.addWidget(self.autoFocusButton,index+2,0,alignment=Qt.AlignLeft)
+        widgetLayout.addWidget(self.videoclipButton,index+2,0,alignment=Qt.AlignLeft)
+        widgetLayout.addWidget(self.autoFocusButton,index+2,1,alignment=Qt.AlignLeft)
+        widgetLayout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum,QSizePolicy.Expanding))  # variable space
         widgetLayout.addWidget(QLabel("Image quality [au]: "),index+3,0,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(self.imageQualityLabel,index+3,1,alignment=Qt.AlignLeft)
         widgetLayout.addWidget(QLabel("Processing time [ms]: "),index+4,0,alignment=Qt.AlignLeft)
@@ -261,7 +263,7 @@ class MainWindow(QWidget):
 
     @pyqtSlot(np.float)
     def imageQualityUpdate(self, image_quality=None):
-        self.imageQualityLabel.setNum(round(image_quality,2)) # Text("Processing time: " + "{:4d}".format(round(timeDiff)) + " ms")
+        self.imageQualityLabel.setNum(round(image_quality,2))
 
     def wheelEvent(self, event):
         if (event.angleDelta().y() > 0) and (self.imageScalingFactor > self.imageScalingStep):  # zooming in
@@ -278,7 +280,7 @@ class MainWindow(QWidget):
 
     def loadSettings(self):
         self.postMessage.emit("{}: info; Loading settings from: {}".format(self.__class__.__name__, self.settings.fileName()))
-        frame_size_str = self.settings.value('display_frame_size')
+        frame_size_str = self.settings.value('processing_frame_size')
         (width, height) = frame_size_str.split('x')
         self.image_size = (int(width), int(height))
         for index, widget in enumerate(self.keyWidgets):  # retreive all labeled parameters

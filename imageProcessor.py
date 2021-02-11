@@ -131,7 +131,7 @@ class ImageProcessor(QThread):
                             # exclude grid RoIS that go outside main ROI
                             if roi_intersection is not None and roi_intersection.area == roi.area:
                                 # Compute variance of Laplacian in Grid RoIs
-                                img = self.image[roi.y1:roi.y2, roi.x1:roi.x2]                                
+                                img = self.image[roi.y1:roi.y2, roi.x1:roi.x2]
                                 self.imageQuality += cv2.Laplacian(img, ddepth=cv2.CV_32F, ksize=5).var()
                                 nr_of_rois += 1
                                 # draw ROIs in image                                

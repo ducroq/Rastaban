@@ -18,10 +18,13 @@ from heater import Heater
 from timeLapse import TimeLapse
 from sysTemp import SystemTemperatures
 import pigpio
+import os
+from subprocess import run
 
 '''
 main application
-'''    
+'''
+run(["sudo", "pigpiod"])
 pio = pigpio.pi()
 if not pio.connected:
     print("ERROR: pigpio daemon is not started")
@@ -48,7 +51,8 @@ mw.cropXp2Spinbox.valueChanged.connect(vs.setCropXp2)
 mw.cropYp2Spinbox.valueChanged.connect(vs.setCropYp2)
 mw.VCSpinBox.valueChanged.connect(vc.setVal)
 mw.TemperatureSPinBox.valueChanged.connect(htr.setTemperature)
-mw.snapshotButton.clicked.connect(vs.takeImage)
+mw.snapshotButton.clicked.connect(lambda: vs.takeImage())
+mw.videoclipButton.clicked.connect(lambda: vs.recordClip())
 mw.autoFocusButton.clicked.connect(lambda: af.start(mw.VCSpinBox.value()))
 mw.focusTargetComboBox.currentIndexChanged.connect(ip.setFocusTarget)
 
@@ -63,7 +67,7 @@ ip.start(QThread.HighPriority)
 
 # Connect processing signals
 vs.frame.connect(ip.update, type=Qt.BlockingQueuedConnection)
-ip.quality.connect(af.imageQualityUpdate)
+ip.quality.connect(af.imageQualityUpdate, type=Qt.BlockingQueuedConnection)
 af.setFocus.connect(mw.VCSpinBox.setValue)
 tl.setLogFileName.connect(lw.setLogFileName)
 tl.setImageStoragePath.connect(vs.setStoragePath)
@@ -72,7 +76,7 @@ tl.stopCamera.connect(vs.stop)
 tl.setFocusTarget.connect(mw.focusTargetComboBox.setCurrentIndex)
 tl.startAutoFocus.connect(lambda: af.start(mw.VCSpinBox.value()))
 af.focussed.connect(tl.focussedSlot)
-tl.takeImage.connect(vs.takeImage)
+tl.takeImage.connect(lambda: vs.takeImage())
 tl.setFocusWithOffset.connect(lambda offset: vc.setVal(mw.VCSpinBox.value() + offset))
 vs.captured.connect(tl.capturedSlot)
 vs.captured.connect(lambda: lw.append("main: info; voice coil={:.1f} temperature={:.1f}".format(vc.value, htr.temperature)))
@@ -101,8 +105,8 @@ mw.closed.connect(lw.close)
     
 # Start the show
 settings = QSettings("settings.ini", QSettings.IniFormat)
+lw.setLogFileName(os.path.sep.join([settings.value('temp_folder'),"temp.log"]))
 lw.append("App started")
-vs.initStream()
 ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
 ip.enhancer.setGamma(mw.gammaSpinBox.value())
 ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())

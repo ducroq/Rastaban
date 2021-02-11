@@ -13,7 +13,7 @@ class SystemTemperatures(QObject):
     alarmRemoved = pyqtSignal()
     failure = pyqtSignal()
 
-    def __init__(self, interval=1, alarm_temperature = 50, failure_temperature = 65):
+    def __init__(self, interval=1, alarm_temperature = 50, failure_temperature = 75):
         super().__init__()
         self.interval = 1000*interval
         self.threshold = alarm_temperature

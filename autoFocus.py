@@ -3,6 +3,7 @@
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 import matplotlib.pyplot as plt
+from wait import wait_ms, wait_signal
 
 ## Autofocus
 ## Perform a naive grid search to optimize the image quality parameter, imgQual, by varying the camera focus.
@@ -19,6 +20,7 @@ class AutoFocus(QObject):
     setFocus = pyqtSignal(float)  # Focus signal
     postMessage = pyqtSignal(str)
     focussed = pyqtSignal(float)
+    rPositionReached = pyqtSignal() # repeat signal
     
     def __init__(self, doPlot=False):
         super().__init__()
@@ -29,9 +31,9 @@ class AutoFocus(QObject):
         
     @pyqtSlot(float)
     def start(self, P_centre=0):
-        N_p=5
-        dP=1
-        N_n=10
+        N_p=5  # Grid size
+        dP=2 # Grid spacing, percentage change per step     
+        N_n=5 # Maximum number of iterations
         if self.running == True:
             self.postMessage.emit('{}: error; autofocus is already running'.format(self.__class__.__name__))
         else:
@@ -60,6 +62,7 @@ class AutoFocus(QObject):
             self.P[self.p] = self.P_centre-self.dP*int((self.N_p-1)/2)  # current process parameter
             self.setFocus.emit(self.P[self.p])  # Move to starting point of grid search
             self.postMessage.emit("{}: info; running".format(self.__class__.__name__))
+            wait_ms(1000)
             self.running = True
 
     @pyqtSlot(float)
@@ -105,6 +108,7 @@ class AutoFocus(QObject):
                         
                 value = np.round(value,2)
                 self.setFocus.emit(value)  # set next focus
+                wait_ms(200)
                 
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
@@ -112,8 +116,14 @@ class AutoFocus(QObject):
     @pyqtSlot()
     def stop(self):
         try:
+            if self.doPlot:
+                plt.close()                
             self.postMessage.emit("{}: info; stopping worker".format(self.__class__.__name__))
             self.running = False
         except Exception as err:
-            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
+    @pyqtSlot()
+    def positionReached(self):
+        self.rPositionReached.emit()
+        
