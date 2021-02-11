@@ -17,14 +17,14 @@ from voiceCoil import VoiceCoil
 from heater import Heater
 from timeLapse import TimeLapse
 from sysTemp import SystemTemperatures
-import pigpio
 import os
 from subprocess import run
+run(["sudo", "pigpiod"])
+import pigpio
 
 '''
 main application
 '''
-run(["sudo", "pigpiod"])
 pio = pigpio.pi()
 if not pio.connected:
     print("ERROR: pigpio daemon is not started")
@@ -36,7 +36,7 @@ lw = LogWindow()
 vs = PiVideoStream()
 ip = ImageProcessor()
 vc = VoiceCoil(pio)
-af = AutoFocus(doPlot=True)
+af = AutoFocus(display=True)
 tl = TimeLapse()
 htr = Heater(pio, 2000)
 st = SystemTemperatures(interval=10, alarm_temperature=55)
