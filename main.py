@@ -18,9 +18,8 @@ from heater import Heater
 from timeLapse import TimeLapse
 from sysTemp import SystemTemperatures
 import os
-from subprocess import run
-run(["sudo", "pigpiod"])
 import pigpio
+
 
 '''
 main application

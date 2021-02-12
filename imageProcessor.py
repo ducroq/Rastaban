@@ -157,8 +157,6 @@ class ImageProcessor(QThread):
         self.fps.stop()
         msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
         self.postMessage.emit(msg)
-        print(msg)
-        self.quit()
 
     @pyqtSlot(str)
     def relayMessage(self, text):

@@ -6,11 +6,11 @@ Based on
  https://picamera.readthedocs.io/en/release-1.13/api_camera.html
  https://www.raspberrypi.org/documentation/hardware/camera/
     
-version December 2020
+version December 2020, January 2021
 Note that there are different image sizes involved:
-1. frame_size: intended image capture frame size, this is converted to a size that the picamera can deal with, i.e. raw_frame_size
-2. clip_frame_size: intended video capture frame size
-3. videoStream frame_size: size of frames that get emitted to the processing chain.
+1. frameSize: intended image capture frame size, this is converted to a size that the picamera can deal with, i.e. raw_frame_size
+2. clipFrameSize: intended video capture frame size
+3. processingFrameSize: size of frames that get emitted to the processing chain.
 """
 import os
 import cv2
@@ -134,6 +134,7 @@ class PiVideoStream(QThread):
         self.monochrome = self.settings.value('camera/monochrome', False, type=bool)
         self.use_video_port = self.settings.value('camera/use_video_port', False, type=bool)
         self.sensorMode = int(self.settings.value('camera/sensor_mode'))
+        self.clipSensorMode = int(self.settings.value('camera/clip_sensor_mode'))
         self.frameRate = int(self.settings.value('camera/frame_rate'))
         self.clipFrameRate = int(self.settings.value('camera/clip_frame_rate'))
 
@@ -171,22 +172,21 @@ class PiVideoStream(QThread):
             self.camera.awb_mode = 'off'
             self.camera.awb_gains = g
             
-            # Setup video port
-            self.camera.start_recording(self.videoStream, format='mjpeg', splitter_port=1, resize=self.processingFrameSize)
+##            # Setup video port, GPU resizes frames, and compresses to mjpeg stream
+##            self.camera.start_recording(self.videoStream, format='mjpeg', splitter_port=1, resize=self.processingFrameSize)
 
-##            # Setup capture port
-##            if self.monochrome:
-##    ##            self.camera.color_effects = (128,128) # return monochrome image, not required if we take Y frame only.
-##                self.rawCapture = PiYArray(self.camera, size=self.camera.resolution)
-##                self.captureStream = self.camera.capture_continuous(self.rawCapture, 'yuv', self.use_video_port)
-##            else:
-##                self.rawCapture = PiRGBArray(self.camera, size=self.camera.resolution)
-##                self.captureStream = self.camera.capture_continuous(self.rawCapture, 'bgr', self.use_video_port)
-##            # init crop rectangle
-##            if self.cropRect[2] == 0:
-##                self.cropRect[2] = self.camera.resolution[1]
-##            if self.cropRect[3] == 0:
-##                self.cropRect[3] = self.camera.resolution[0]
+            # Setup capture port
+            if self.monochrome:
+                self.rawCapture = PiYArray(self.camera, size=self.processingFrameSize)
+                self.captureStream = self.camera.capture_continuous(self.rawCapture, 'yuv', self.use_video_port, resize=self.processingFrameSize)
+            else:
+                self.rawCapture = PiRGBArray(self.camera, size=self.processingFrameSize)
+                self.captureStream = self.camera.capture_continuous(self.rawCapture, 'bgr', self.use_video_port, resize=self.processingFrameSize)
+            # init crop rectangle
+            if self.cropRect[2] == 0:
+                self.cropRect[2] = self.camera.resolution[1]
+            if self.cropRect[3] == 0:
+                self.cropRect[3] = self.camera.resolution[0]
                 
             # start the thread
             self.start()
@@ -199,27 +199,29 @@ class PiVideoStream(QThread):
         self.fps = FPS().start()
         while not self.isInterruptionRequested():
             try:
-##                # Grab a frame from the capture port
-##                self.rawCapture.seek(0) 
-##                img = next(self.captureStream).array # grab the frame from the stream
-##                self.frame.emit(cv2.resize(img, self.processingFrameSize[:2]))
-##                self.fps.update()
+                # Grab a frame from the capture port
+                self.rawCapture.seek(0) 
+                img = next(self.captureStream).array # grab the frame from the stream
+                self.frame.emit(img)#cv2.resize(img, self.processingFrameSize[:2]))
+                self.fps.update()
 
-                # Grab jpeg from the mpeg video stream
-                self.videoStream.seek(0)
-                buf = self.videoStream.read()
-                if buf.startswith(b'\xff\xd8'):
-                    # jpeg magic number is detected
-                    flag = cv2.IMREAD_GRAYSCALE if self.monochrome else cv2.IMREAD_COLOR
-                    img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), flag) 
-                    self.frame.emit(img)
-                    self.fps.update()
-                    self.videoStream.truncate(0)
+##                # Grab jpeg from an mpeg video stream
+##                self.videoStream.seek(0)
+##                buf = self.videoStream.read()
+##                if buf.startswith(b'\xff\xd8'):
+##                    # jpeg magic number is detected
+##                    flag = cv2.IMREAD_GRAYSCALE if self.monochrome else cv2.IMREAD_COLOR
+##                    img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), flag) 
+##                    self.frame.emit(img)
+##                    self.fps.update()
+##                    self.videoStream.truncate(0)
             except Exception as err:
                 self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))            
             
+        self.fps.stop()
+        msg = "{}: info; finished, approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
+        self.postMessage.emit(msg)
         self.finished.emit()
-        self.postMessage.emit("{}: info; finished".format(__class__.__name__))
 
         
     @pyqtSlot()
@@ -229,14 +231,9 @@ class PiVideoStream(QThread):
             if self.isRunning():
                 self.requestInterruption()
                 wait_signal(self.finished, 2000)
-            self.camera.stop_recording(splitter_port=1)
-            self.fps.stop()
-            msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
-            self.postMessage.emit(msg)
-##            self.quit()
         except Exception as err:
             msg = "{}: error; stopping method".format(self.__class__.__name__)
-        print(msg)
+            print(msg)
        
     @pyqtSlot(str)
     def takeImage(self, filename_prefix=None):
@@ -259,6 +256,16 @@ class PiVideoStream(QThread):
 
     @pyqtSlot(str, int)
     def recordClip(self, duration=10):
+        """
+        Captures a videoclip of duration at clipFrameRate fps and resolution clipFrameSize.
+        Camera videomode is set by clipSensorMode, such that the camera frameSize equals
+          1640x1232 or lower, since higher resolutions result in system freezing.
+        The GPU resizes the captured video to the intended resolution.
+        In many cases, the intended framerate is not achieved. For that reason, ffprobe counts
+        the total number of frames that were actually taken.        
+        Next, the h264 video file is boxed using MP4box.
+        For some reason, changing the framerate with MP4Box did not work out.        
+        """
         filename = '{:016d}_{}s'.format(round(time.time() * 1000), round(duration))
                 
         # open path
@@ -269,8 +276,9 @@ class PiVideoStream(QThread):
         self.postMessage.emit("{}: info; starting recording for {} s".format(__class__.__name__, duration))
         
         self.stop()
-        self.camera.sensor_mode = 4 # higher resolutions result in system freezing
+        self.camera.sensor_mode = self.clipSensorMode
         self.camera.framerate = self.clipFrameRate
+        # GPU resizes frames, and compresses to h264 stream
         self.camera.start_recording(filename + '.h264', format='h264', splitter_port=2, resize=self.clipFrameSize, sps_timing=True)
         wait_ms(duration*1000)
         self.camera.stop_recording(splitter_port=2)
