@@ -124,8 +124,7 @@ class PiVideoStream(QThread):
             warnings.filterwarnings('default', category=DeprecationWarning)
             self.settings = QSettings("settings.ini", QSettings.IniFormat)
             self.loadSettings()
-            self.initStream()
-            
+            self.initStream()            
             
     def loadSettings(self):
         self.postMessage.emit("{}: info; loading camera settings from {}".format(self.__class__.__name__, self.settings.fileName()))
@@ -146,6 +145,26 @@ class PiVideoStream(QThread):
         if not self.monochrome:
             self.processingFrameSize = self.processingFrameSize + (3,)
 
+    def setCaptureParameters(self):
+        # Set camera parameters
+        self.camera.sensor_mode = self.sensorMode
+        self.camera.resolution = self.frameSize
+        self.camera.framerate = self.frameRate
+        self.camera.image_effect = self.settings.value('camera/effect')
+        self.camera.iso = int(self.settings.value('camera/iso')) # should force unity analog gain       
+        self.camera.video_denoise = self.settings.value('camera/video_denoise', False, type=bool)
+        self.camera.start_preview()
+
+        # Wait for the automatic gain control to settle
+        wait_ms(3000)
+
+        # Now fix the values
+        self.camera.shutter_speed = self.camera.exposure_speed
+        self.camera.exposure_mode = 'off'
+        g = self.camera.awb_gains
+        self.camera.awb_mode = 'off'
+        self.camera.awb_gains = g        
+
     @pyqtSlot()
     def initStream(self):
         # Initialize the camera stream
@@ -153,24 +172,7 @@ class PiVideoStream(QThread):
             # in case init gets called, while thread is running
             self.postMessage.emit("{}: error; video stream is already running".format(__class__.__name__))
         else:
-            # Set camera parameters
-            self.camera.resolution = self.frameSize
-            self.camera.sensor_mode = self.sensorMode
-            self.camera.framerate = self.frameRate
-            self.camera.image_effect = self.settings.value('camera/effect')
-            self.camera.shutter_speed = int(self.settings.value('camera/shutter_speed'))
-            self.camera.iso = int(self.settings.value('camera/iso')) # should force unity analog gain       
-            self.camera.video_denoise = self.settings.value('camera/video_denoise', False, type=bool)
-
-            # Wait for the automatic gain control to settle
-            wait_ms(2000)
-
-            # Now fix the values
-            self.camera.shutter_speed = self.camera.exposure_speed
-            self.camera.exposure_mode = 'off'
-            g = self.camera.awb_gains
-            self.camera.awb_mode = 'off'
-            self.camera.awb_gains = g
+            self.setCaptureParameters()
             
 ##            # Setup video port, GPU resizes frames, and compresses to mjpeg stream
 ##            self.camera.start_recording(self.videoStream, format='mjpeg', splitter_port=1, resize=self.processingFrameSize)
@@ -248,10 +250,18 @@ class PiVideoStream(QThread):
             if self.storagePath is not None:
                 filename = os.path.sep.join([self.storagePath, filename])
 
-        self.camera.capture(filename, format='png')
+        try:
+            self.stop()
+            self.setCaptureParameters()
+            self.camera.capture(filename, format='png')
+        except Exception as err:
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
         self.captured.emit()
         self.postMessage.emit("{}: info; image written to {}".format(__class__.__name__, filename))
+
+        # Revert to original stream parameters
+        self.initStream()        
                 
 
     @pyqtSlot(str, int)
@@ -275,16 +285,16 @@ class PiVideoStream(QThread):
         # stop current video stream, maybe mpeg and h264 compression cannot run simultaneously?
         self.postMessage.emit("{}: info; starting recording for {} s".format(__class__.__name__, duration))
         
-        self.stop()
-        self.camera.sensor_mode = self.clipSensorMode
-        self.camera.framerate = self.clipFrameRate
-        # GPU resizes frames, and compresses to h264 stream
-        self.camera.start_recording(filename + '.h264', format='h264', splitter_port=2, resize=self.clipFrameSize, sps_timing=True)
-        wait_ms(duration*1000)
-        self.camera.stop_recording(splitter_port=2)
-        
-        # Wrap an MP4 box around the video
         try:
+            self.stop()
+            self.camera.sensor_mode = self.clipSensorMode
+            self.camera.framerate = self.clipFrameRate
+            # GPU resizes frames, and compresses to h264 stream
+            self.camera.start_recording(filename + '.h264', format='h264', splitter_port=2, resize=self.clipFrameSize, sps_timing=True)
+            wait_ms(duration*1000)
+            self.camera.stop_recording(splitter_port=2)
+            
+            # Wrap an MP4 box around the video
             nr_of_frames = check_output(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "default=nokey=1:noprint_wrappers=1", filename + '.h264'])
             real_fps = duration/float(nr_of_frames)
             self.postMessage.emit("{}: info; video clip captured with real framerate: {} fps".format(__class__.__name__, real_fps))

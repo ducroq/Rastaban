@@ -2,7 +2,7 @@
 """
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-import os
+import os, glob
 import re
 import time
 import traceback
@@ -10,7 +10,6 @@ import numpy as np
 ##import smtplib, ssl
 from webdav3.client import Client
 from webdav3.exceptions import WebDavException
-##from math import sqrt
 from PyQt5.QtCore import QSettings, QObject, QTimer, QEventLoop, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog, QFileDialog #, QPushButton, QLabel, QSpinBox, QDoubleSpinBox, QVBoxLayout, QGridLayout
 from wait import wait_signal, wait_ms
@@ -74,17 +73,21 @@ class TimeLapse(QObject):
             self.setLogFileName.emit(log_file_name)            
 
             # clear temporary storage path
-            path = os.path.sep.join([self.local_storage_path, '*'])
-            self.postMessage.emit('{}: info; clearing temporary storage path: {}'.format(self.__class__.__name__, path))
-            os.system('rm -rf {:s}'.format(path))
+            self.postMessage.emit('{}: info; clearing temporary storage path: {}'.format(self.__class__.__name__, self.local_storage_path))
+            files = glob.glob(os.path.sep.join([self.local_storage_path, '*']))
+            for f in files:
+                if not os.path.isdir(f):
+                    os.remove(f)
 
             # copy timelapse setting file to storage folder
-            os.system('cp {:s} {:s}'.format(timelapse_setting_file_name, self.local_storage_path))
+            os.system('cp {} {}'.format(timelapse_setting_file_name, self.local_storage_path))
 
             # create temporary image storage path
             self.local_image_storage_path = os.path.sep.join([self.local_storage_path,'img'])
             if not os.path.exists(self.local_image_storage_path):
-                os.makedirs(self.local_image_storage_path)
+                if not os.makedirs(self.local_image_storage_path):
+                    self.postMessage.emit('{}: error; creating image storage path: {}'.format(self.__class__.__name__,
+                                                                                  self.local_image_storage_path))
             self.postMessage.emit('{}: info; temporary image storage path: {}'.format(self.__class__.__name__,
                                                                                   self.local_image_storage_path))
             self.setImageStoragePath.emit(self.local_image_storage_path)
@@ -93,7 +96,7 @@ class TimeLapse(QObject):
             self.openWebDAV()
 
             # copy files to server
-            self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)
+            self.webdav_client.push(local_directory=self.local_storage_path, remote_directory=self.server_storage_path)
             self.server_log_file_name = os.path.sep.join([self.server_storage_path, self.timelapse_settings.value('id') + ".log"])
 
             # create directory structure on server
@@ -170,7 +173,7 @@ class TimeLapse(QObject):
                 focusTarget = self.timelapse_settings.value('acquisition/focustarget')
                 self.postMessage.emit('{}: info; using ROI as {} focus target'.format(self.__class__.__name__, focusTarget))
                 self.setFocusTarget.emit(focusTarget)
-                wait_ms(500) # wait to let grid detection fire up
+                wait_ms(200) # wait to let grid detection fire up
                 self.startAutoFocus.emit()
                 wait_signal(self.focussed, 60000)
 
@@ -180,20 +183,21 @@ class TimeLapse(QObject):
                 # set offset                
                 offset = float(offset_str)
                 self.setFocusWithOffset.emit(offset)
-                wait_ms(200) # wait to let camera image settle
+                wait_ms(500) # wait to let camera image settle
 
                 # clear local image storage path
-                path = os.path.sep.join([self.local_image_storage_path, '*'])
-                self.postMessage.emit('{}: info; clearing temporary image storage path: {}'.format(self.__class__.__name__, path))
-                os.system('rm -rf {:s}'.format(path))
+                self.postMessage.emit('{}: info; clearing temporary image storage path: {}'.format(self.__class__.__name__, self.local_image_storage_path))
+                files = glob.glob(os.path.sep.join([self.local_image_storage_path, '*']))
+                for f in files:
+                    os.remove(f)
                 
                 # take image or video
                 self.takeImage.emit()
-                wait_signal(self.captured, 10000) # snapshot taken
+                wait_signal(self.captured, 30000) # snapshot taken
                 ## TODO !! initiate videoclip recording
                     
                 # push image file
-                self.webdav_client.push(remote_directory=os.path.sep.join([self.server_storage_path, offset_str]),
+                ret = self.webdav_client.push(remote_directory=os.path.sep.join([self.server_storage_path, offset_str]),
                                         local_directory=self.local_image_storage_path)
                 val = self.focus + offset if self.focus is not None else offset
                 self.postMessage.emit('{}: info; saved image at focus: {:.1f}%'.format(self.__class__.__name__, val))
