@@ -128,7 +128,7 @@ class ImageProcessor(QThread):
                     for rois in ROIs:
                         for roi in rois:
                             roi_intersection = roi & self.ROI
-                            # exclude grid RoIS that go outside main ROI
+                            # xclude grid RoIS that go outside main ROI
                             if roi_intersection is not None and roi_intersection.area == roi.area:
                                 # Compute variance of Laplacian in Grid RoIs
                                 img = self.image[roi.y1:roi.y2, roi.x1:roi.x2]
@@ -151,12 +151,18 @@ class ImageProcessor(QThread):
     @pyqtSlot()
     def stop(self):
         self.postMessage.emit("{}: info; stopping".format(__class__.__name__))
-        if self.isRunning():
-            self.requestInterruption()
-            wait_signal(self.finished, 2000)            
-        self.fps.stop()
-        msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
-        self.postMessage.emit(msg)
+        try:
+            if self.isRunning():
+                self.requestInterruption()
+                wait_signal(self.finished, 2000)
+        except Exception as err:
+            msg = "{}: error; stopping method".format(self.__class__.__name__)
+            print(msg)
+        finally:
+            self.fps.stop()
+            msg = "{}: info; approx. processing speed: {:.2f} fps".format(self.__class__.__name__, self.fps.fps())
+            self.postMessage.emit(msg)
+            self.quit() # Note that thread quit is required, otherwise strange things happen.
 
     @pyqtSlot(str)
     def relayMessage(self, text):
@@ -165,7 +171,5 @@ class ImageProcessor(QThread):
 
     @pyqtSlot(int)
     def setFocusTarget(self, val):
-        self.focusTarget = val        
-
-            
+        self.focusTarget = val           
 

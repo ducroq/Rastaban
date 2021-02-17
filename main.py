@@ -24,11 +24,13 @@ import pigpio
 '''
 main application
 '''
+settings = QSettings("settings.ini", QSettings.IniFormat)
 pio = pigpio.pi()
 if not pio.connected:
     print("ERROR: pigpio daemon is not started")
     exit()
-    
+
+# Create objects    
 app = QApplication([])
 mw = MainWindow()
 lw = LogWindow()
@@ -39,6 +41,17 @@ af = AutoFocus(display=True)
 tl = TimeLapse()
 htr = Heater(pio, 2000)
 st = SystemTemperatures(interval=10, alarm_temperature=55)
+
+# Connect logging signals
+lw.setLogFileName(os.path.sep.join([settings.value('temp_folder'),"temp.log"]))
+vs.postMessage.connect(lw.append)
+mw.postMessage.connect(lw.append)
+ip.postMessage.connect(lw.append)
+af.postMessage.connect(lw.append)
+vc.postMessage.connect(lw.append)
+htr.postMessage.connect(lw.append)
+tl.postMessage.connect(lw.append)
+st.postMessage.connect(lw.append)
 
 # Connect GUI signals
 mw.rotateSpinBox.valueChanged.connect(ip.enhancer.setRotateAngle)
@@ -61,7 +74,7 @@ ip.frame.connect(mw.update)
 ip.quality.connect(mw.imageQualityUpdate)
 
 # Start video stream
-vs.start(QThread.HighPriority)
+vs.initStream()
 ip.start(QThread.HighPriority)
 
 # Connect processing signals
@@ -73,23 +86,15 @@ tl.setImageStoragePath.connect(vs.setStoragePath)
 tl.startCamera.connect(vs.initStream)
 tl.stopCamera.connect(vs.stop)
 tl.setFocusTarget.connect(mw.focusTargetComboBox.setCurrentIndex)
+tl.setFocusTarget.connect(ip.setFocusTarget)
 tl.startAutoFocus.connect(lambda: af.start(mw.VCSpinBox.value()))
 af.focussed.connect(tl.focussedSlot)
 tl.takeImage.connect(lambda: vs.takeImage())
+tl.recordClip.connect(lambda dur: vs.recordClip(duration=dur))
 tl.setFocusWithOffset.connect(lambda offset: vc.setVal(mw.VCSpinBox.value() + offset))
 vs.captured.connect(tl.capturedSlot)
 vs.captured.connect(lambda: lw.append("main: info; voice coil={:.1f} temperature={:.1f}".format(vc.value, htr.temperature)))
 tl.setTemperature.connect(htr.setTemperature)
-
-# Connect logging signals
-vs.postMessage.connect(lw.append)
-mw.postMessage.connect(lw.append)
-ip.postMessage.connect(lw.append)
-af.postMessage.connect(lw.append)
-vc.postMessage.connect(lw.append)
-htr.postMessage.connect(lw.append)
-tl.postMessage.connect(lw.append)
-st.postMessage.connect(lw.append)
 
 # Connect closing signals
 st.failure.connect(mw.close, type=Qt.QueuedConnection)
@@ -103,9 +108,6 @@ mw.closed.connect(tl.stop)
 mw.closed.connect(lw.close)
     
 # Start the show
-settings = QSettings("settings.ini", QSettings.IniFormat)
-lw.setLogFileName(os.path.sep.join([settings.value('temp_folder'),"temp.log"]))
-lw.append("App started")
 ip.enhancer.setRotateAngle(mw.rotateSpinBox.value())
 ip.enhancer.setGamma(mw.gammaSpinBox.value())
 ip.enhancer.setClaheClipLimit(mw.claheSpinBox.value())

@@ -22,10 +22,10 @@ class TimeLapse(QObject):
     stopCamera = pyqtSignal()
     startCamera = pyqtSignal()
     takeImage = pyqtSignal()
+    recordClip = pyqtSignal(int)
     startAutoFocus = pyqtSignal()
     focussed = pyqtSignal() # repeater signal
     setFocusTarget = pyqtSignal(int)
-##    setGridDetector = pyqtSignal()
     captured = pyqtSignal() # repeater signal
     progressUpdate = pyqtSignal(int)
     finished = pyqtSignal()
@@ -85,9 +85,7 @@ class TimeLapse(QObject):
             # create temporary image storage path
             self.local_image_storage_path = os.path.sep.join([self.local_storage_path,'img'])
             if not os.path.exists(self.local_image_storage_path):
-                if not os.makedirs(self.local_image_storage_path):
-                    self.postMessage.emit('{}: error; creating image storage path: {}'.format(self.__class__.__name__,
-                                                                                  self.local_image_storage_path))
+                os.makedirs(self.local_image_storage_path)
             self.postMessage.emit('{}: info; temporary image storage path: {}'.format(self.__class__.__name__,
                                                                                   self.local_image_storage_path))
             self.setImageStoragePath.emit(self.local_image_storage_path)
@@ -170,8 +168,8 @@ class TimeLapse(QObject):
 
             # autofocus
             if self.timelapse_settings.value('acquisition/autofocus', False, type=bool):
-                focusTarget = self.timelapse_settings.value('acquisition/focustarget')
-                self.postMessage.emit('{}: info; using ROI as {} focus target'.format(self.__class__.__name__, focusTarget))
+                focusTarget = self.timelapse_settings.value('acquisition/focustarget', 0, type=int)
+                self.postMessage.emit('{}: info; using focus target {}'.format(self.__class__.__name__, focusTarget))
                 self.setFocusTarget.emit(focusTarget)
                 wait_ms(200) # wait to let grid detection fire up
                 self.startAutoFocus.emit()
@@ -192,11 +190,15 @@ class TimeLapse(QObject):
                     os.remove(f)
                 
                 # take image or video
-                self.takeImage.emit()
+                if self.timelapse_settings.value('acquisition/snapshot', False, type=bool):
+                    self.takeImage.emit()
                 wait_signal(self.captured, 30000) # snapshot taken
-                ## TODO !! initiate videoclip recording
+                if self.timelapse_settings.value('acquisition/videoclip', False, type=bool):
+                    duration = self.timelapse_settings.value('acquisition/clip_length', 10, type=int)
+                    self.recordClip.emit(duration)                    
+                wait_signal(self.captured, (30+duration)*1000) # video taken
                     
-                # push image file
+                # push capture to remote
                 ret = self.webdav_client.push(remote_directory=os.path.sep.join([self.server_storage_path, offset_str]),
                                         local_directory=self.local_image_storage_path)
                 val = self.focus + offset if self.focus is not None else offset
