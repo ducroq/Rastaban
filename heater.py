@@ -19,9 +19,10 @@ class Heater(QThread):
     pwm_frequency = 50000
     PWM_dutycyle_range = 100
     temperature = None
+    temperature_message_interval = 10000
     setPoint = None
     prevEror = None
-    kP, kI, kD = 1.0, 0.1, 0.5
+    kP, kI, kD = 1.0, 0.1, 0.5    
 
     def __init__(self, pio, interval=1000, setPoint=None):
         super().__init__()
@@ -35,6 +36,7 @@ class Heater(QThread):
         self.interval = interval  # timer interval, i.e. update period [ms]
         self.setTemperature(setPoint)
         self.timer = QTimer()
+        self.timer_temperature_message = QTimer()
 ##        self.pio.set_mode(self.dir_pin, pigpio.OUTPUT)
 ##        self.pio.hardware_PWM(self.pwm_pin, self.pwm_frequency, 0)
         self.pio.set_mode(self.pwm_pin, pigpio.OUTPUT)
@@ -45,7 +47,13 @@ class Heater(QThread):
         self.pio.i2c_write_byte_data(self.MCP9800Handle, 0x01, 0b01100000)  # write config register resolution = 10 bit, see p18 of datasheet
         self.timer.timeout.connect(self.update)
         self.timer.start(self.interval)
+        self.timer_temperature_message.timeout.connect(self.send_temperature_message)
+        self.timer_temperature_message.start(self.temperature_message_interval)
 
+    @pyqtSlot()
+    def send_temperature_message(self):
+        self.postMessage.emit("{}: info; T={}°C".format(self.__class__.__name__, self.temperature))
+        
     @pyqtSlot()
     def update(self):        
         try:

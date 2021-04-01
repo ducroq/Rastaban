@@ -7,13 +7,13 @@ import re
 import time
 import traceback
 import numpy as np
-##import smtplib, ssl
+import smtplib, ssl
 from webdav3.client import Client
 from webdav3.exceptions import WebDavException
 from PyQt5.QtCore import QSettings, QObject, QTimer, QEventLoop, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog, QFileDialog #, QPushButton, QLabel, QSpinBox, QDoubleSpinBox, QVBoxLayout, QGridLayout
 from wait import wait_signal, wait_ms
-
+import subprocess
     
 class TimeLapse(QObject):
     postMessage = pyqtSignal(str)
@@ -69,8 +69,9 @@ class TimeLapse(QObject):
 
             # set logging file
             self.local_storage_path = self.settings.value('temp_folder')
-            log_file_name = os.path.sep.join([self.local_storage_path, self.timelapse_settings.value('id') + ".log"])
-            self.setLogFileName.emit(log_file_name)            
+            self.log_file_name = os.path.sep.join([self.local_storage_path, self.timelapse_settings.value('id') + ".log"])
+            self.setLogFileName.emit(self.log_file_name)
+            wait_ms(100)
 
             # clear temporary storage path
             self.postMessage.emit('{}: info; clearing temporary storage path: {}'.format(self.__class__.__name__, self.local_storage_path))
@@ -90,18 +91,54 @@ class TimeLapse(QObject):
                                                                                   self.local_image_storage_path))
             self.setImageStoragePath.emit(self.local_image_storage_path)
 
-            # open WebDAV connection to server, esing credentials from connections.ini file
-            self.openWebDAV()
+            # set op connectivity
+            if self.timelapse_settings.contains('connections/storage'):
+                if self.timelapse_settings.value('connections/storage') == 'rclone':
+                    # rclone to path provided in connections.ini file
+                    self.server_storage_path = self.conn_settings.value('rclone/storage_path') + ':' + self.timelapse_settings.value('id')
 
-            # copy files to server
-            self.webdav_client.push(local_directory=self.local_storage_path, remote_directory=self.server_storage_path)
-            self.server_log_file_name = os.path.sep.join([self.server_storage_path, self.timelapse_settings.value('id') + ".log"])
+                    try:
+                        subprocess.run(["rclone", "mkdir", self.server_storage_path])
+                        subprocess.run(["rclone", "copy", "--no-traverse", self.local_storage_path, self.server_storage_path])
 
-            # create directory structure on server
-            for offset in self.timelapse_settings.value('acquisition/offsets'):
-                self.webdav_client.mkdir(os.path.sep.join([self.server_storage_path, offset]))
+                        # create directory structure on server
+                        for offset in self.timelapse_settings.value('acquisition/offsets'):
+                            subprocess.run(["rclone", "mkdir", os.path.sep.join([self.server_storage_path, offset])])
+                        
+                    except Exception as err:
+                        self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
-            
+                    self.postMessage.emit('{}: info; rclone connection to {}'.format(self.__class__.__name__, self.server_storage_path))
+                    
+                elif self.timelapse_settings.value('connections/storage') == 'wbedav':
+                    # open WebDAV connection to server, using credentials from connections.ini file
+                    self.server_storage_path = os.path.sep.join([self.conn_settings.value('webdav/storage_path'),
+                                                                 self.timelapse_settings.value('id')])
+                    
+                    options = {'webdav_hostname': self.conn_settings.value('webdav/hostname'),
+                               'webdav_login': self.conn_settings.value('webdav/login'),
+                               'webdav_password': self.conn_settings.value('webdav/password')
+                               }
+                    try:
+                        self.webdav_client = Client(options)
+                        self.webdav_client.mkdir(self.server_storage_path)
+                    except WebDavException as err:
+                        self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
+
+                    # copy files to server
+                    self.webdav_client.push(local_directory=self.local_storage_path, remote_directory=self.server_storage_path)
+                    self.server_log_file_name = os.path.sep.join([self.server_storage_path, self.timelapse_settings.value('id') + ".log"])
+
+                    # create directory structure on server
+                    for offset in self.timelapse_settings.value('acquisition/offsets'):
+                        self.webdav_client.mkdir(os.path.sep.join([self.server_storage_path, offset]))
+
+                    self.postMessage.emit('{}: info; WebDAV connection to {}: {}'.format(self.__class__.__name__,
+                                                                                     self.conn_settings.value('webdav/hostname'),
+                                                                                     self.server_storage_path))
+                else:
+                    self.postMessage.emit('{}: error; unknown remote'.format(self.__class__.__name__))
+                
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
 
@@ -113,10 +150,15 @@ class TimeLapse(QObject):
         t = time.strptime(self.timelapse_settings.value('run/wait'),'%H:%M:%S')
         self.run_wait_s = (t.tm_hour*60 + t.tm_min)*60 + t.tm_sec
 
+        message = """Subject: Experiment started \n\n ."""
+        # do something fancy here in future: https://realpython.com/python-send-email/#sending-fancy-emails
+        self.sendNotification(message)            
+
         self.postMessage.emit('{}: info; run duration: {} s, run wait: {} s'.format(self.__class__.__name__,
                                                                                     self.run_duration_s,
                                                                                     self.run_wait_s))
         # start timer
+        self.prev_note_nr = 0 # for logging
         self.start_time_s = time.time()
         self.timer.start(0)
 
@@ -129,24 +171,6 @@ class TimeLapse(QObject):
         except Exception as err:
             self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
             
-
-    def openWebDAV(self):
-        self.server_storage_path = os.path.sep.join([self.conn_settings.value('webdav/storage_path'),
-                                                     self.timelapse_settings.value('id')])
-        
-        options = {'webdav_hostname': self.conn_settings.value('webdav/hostname'),
-                   'webdav_login': self.conn_settings.value('webdav/login'),
-                   'webdav_password': self.conn_settings.value('webdav/password')
-                   }
-        try:
-            self.webdav_client = Client(options)
-            self.webdav_client.mkdir(self.server_storage_path)
-        except WebDavException as err:
-            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
-
-        self.postMessage.emit('{}: info; WebDAV connection to {}: {}'.format(self.__class__.__name__,
-                                                                         self.conn_settings.value('webdav/hostname'),
-                                                                         self.server_storage_path))
 
     @pyqtSlot()
     def capturedSlot(self):
@@ -192,24 +216,25 @@ class TimeLapse(QObject):
                 # take image or video
                 if self.timelapse_settings.value('acquisition/snapshot', False, type=bool):
                     self.takeImage.emit()
-                wait_signal(self.captured, 30000) # snapshot taken
+                    wait_signal(self.captured, 30000) # snapshot taken
                 if self.timelapse_settings.value('acquisition/videoclip', False, type=bool):
                     duration = self.timelapse_settings.value('acquisition/clip_length', 10, type=int)
                     self.recordClip.emit(duration)                    
-                wait_signal(self.captured, (30+duration)*1000) # video taken
+                    wait_signal(self.captured, (30+duration)*1000) # video taken
                     
                 # push capture to remote
-                ret = self.webdav_client.push(remote_directory=os.path.sep.join([self.server_storage_path, offset_str]),
-                                        local_directory=self.local_image_storage_path)
+                if self.timelapse_settings.contains('connections/storage'):
+                    if self.timelapse_settings.value('connections/storage') == 'rclone':
+                        subprocess.run(["rclone", "copy", "--no-traverse", self.local_image_storage_path, os.path.sep.join([self.server_storage_path, offset_str])])
+                    elif self.timelapse_settings.value('connections/storage') == 'wbedav':
+                        self.webdav_client.push(remote_directory=os.path.sep.join([self.server_storage_path, offset_str]),
+                                                local_directory=self.local_image_storage_path)
                 val = self.focus + offset if self.focus is not None else offset
-                self.postMessage.emit('{}: info; saved image at focus: {:.1f}%'.format(self.__class__.__name__, val))
+                self.postMessage.emit('{}: info; saved image and/or video at focus: {:.1f}%'.format(self.__class__.__name__, val))
 
             # return to no offset
             self.setFocusWithOffset.emit(0)
             wait_ms(100) # wait to let camera image settle
-                
-            # push log file
-            self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)
             
             # wrap up current round of acquisition     
             self.stopCamera.emit()
@@ -222,6 +247,18 @@ class TimeLapse(QObject):
             self.progressUpdate.emit(progress_percentage)
             self.postMessage.emit("{}: info; progress={:d}%".format(self.__class__.__name__, progress_percentage))
 
+            # send a notification
+            note_nr = int(progress_percentage/10)
+            if note_nr != self.prev_note_nr:
+                self.prev_note_nr = note_nr
+
+                if progress_percentage < 100:
+                    message = """Subject: Progress = {}% \n\n Still {} s left""".format(progress_percentage, int(self.run_duration_s - elapsed_total_time_s))
+                else:
+                    message = """Subject: Experiment finalized \n\n  Done."""
+                # do something fancy here in future: https://realpython.com/python-send-email/#sending-fancy-emails
+                self.sendNotification(message)              
+
             # check if we still have time to do another round
             if elapsed_total_time_s + self.run_wait_s < self.run_duration_s:
                 self.timer.setInterval(self.run_wait_s*1000)
@@ -229,12 +266,42 @@ class TimeLapse(QObject):
             else:
                 self.timer.stop()
                 self.postMessage.emit("{}: info; run finalized".format(self.__class__.__name__))
-                self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)
                 if self.timelapse_settings.value('shutdown', False, type=bool):
                     self.postMessage.emit("{}: info; shutdown app".format(self.__class__.__name__))
                     self.finished.emit()
 
-        
+            # push log file
+            if self.timelapse_settings.contains('connections/storage'):
+                if self.timelapse_settings.value('connections/storage') == 'rclone':
+                    print(["rclone", "copy", "--no-traverse", self.log_file_name, self.server_storage_path])
+                    subprocess.run(["rclone", "copy", "--no-traverse", self.log_file_name, self.server_storage_path])
+                elif self.timelapse_settings.value('connections/storage') == 'wbedav':
+                    self.webdav_client.push(remote_directory=self.server_storage_path, local_directory=self.local_storage_path)
+                    
         except Exception as err:
-            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))               
-                      
+            self.postMessage.emit("{}: error; type: {}, args: {}".format(self.__class__.__name__, type(err), err.args))
+            
+
+    def sendNotification(self, message):
+##        if self.timelapse_settings.contains('connections/email'):
+        conn_settings = QSettings("connections.ini", QSettings.IniFormat)
+        context = ssl.create_default_context()  # Create a secure SSL context
+        try:
+            host = conn_settings.value('smtp/host')
+            port = conn_settings.value('smtp/port', 400, type=int)
+            
+            with smtplib.SMTP_SSL(host, port, context=context) as server:
+                login = conn_settings.value('smtp/login')
+                password = conn_settings.value('smtp/password')
+                server.login(login, password)
+                server.sendmail(conn_settings.value('smtp/login'), \
+                                self.timelapse_settings.value('connections/email'), \
+                                message)
+                print(conn_settings.value('smtp/login'), \
+                                self.timelapse_settings.value('connections/email'), \
+                                message)
+            self.postMessage.emit("{}: info; notification send to {}".format(self.__class__.__name__, self.timelapse_settings.value('connections/email')))
+        except Exception as err:
+            traceback.print_exc()
+            self.signals.error.emit((type(err), err.args, traceback.format_exc()))            
+                          
